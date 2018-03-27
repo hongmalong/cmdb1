@@ -20,5 +20,20 @@ import cmdb1_demo1_app1.views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('',cmdb1_demo1_app1.views.HelloWorld),
-    
+    path('company',cmdb1_demo1_app1.views.Company),
+    path('provider',cmdb1_demo1_app1.views.Provider),
+    path('serverroom',cmdb1_demo1_app1.views.ServerRoom),
+    path('cabinet',cmdb1_demo1_app1.views.Cabinet),
+    path('equipmentType',cmdb1_demo1_app1.views.EquipmentType),
+    path('equipment',cmdb1_demo1_app1.views.Equipment),
+    path('occupation',cmdb1_demo1_app1.views.Occupation),
+    path('private',cmdb1_demo1_app1.views.Private),
+    path('serviceType',cmdb1_demo1_app1.views.ServiceType),
+    path('project',cmdb1_demo1_app1.views.Project),
+    path('service',cmdb1_demo1_app1.views.Service),
+    path('enviroment',cmdb1_demo1_app1.views.Enviroment),
+    path('node',cmdb1_demo1_app1.views.Node),
+    path('port',cmdb1_demo1_app1.views.Port),
+    path('logPath',cmdb1_demo1_app1.views.LogPath),
+
 ]
