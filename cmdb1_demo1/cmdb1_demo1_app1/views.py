@@ -909,14 +909,14 @@ def Node ( request ) :
             new.service= nodeService
             new.nodeNumber= nodeNodeNumber
             new.ip= nodeIp
-            #端口范围从8000-65535
+            #端口范围从8081-65535
             #构建一个数组
             #把已有的端口号做成一个数组
             #对比两个数组，把不匹配的做成一个数组
             #从这个数组的开头选出三个端口号
-            portBegin=8000
+            portBegin=8081
             portRange=[]
-            while portBegin>=8000:
+            while portBegin>=8080:
                 portRange.append(portBegin)
                 portBegin+=1
                 if portBegin==65535:
@@ -1005,12 +1005,12 @@ def Node ( request ) :
             if '' in newNodePortList:
                 newNodePortList.remove('')
 
-            portBegin=8000
+            portBegin=8081
             portRange=[]
-            while portBegin>=8000:
+            while portBegin>=8080:
                 portRange.append(portBegin)
                 portBegin+=1
-                if portBegin==8010:
+                if portBegin==65535:
                     break
             
             currentPortList=[]
@@ -1045,7 +1045,7 @@ def Node ( request ) :
         
             if RepeatPortListNotInOldNodePortList:
                 for i in RepeatPortListNotInOldNodePortList:
-                    if (int(i) <8000 or int(i)>65535):
+                    if (int(i) <8080 or int(i)>65535):
                         return HttpResponse('超出范围: '+str(i))
                     else:
                         return HttpResponse('重复的端口是'+str(RepeatPortListNotInOldNodePortList))
