@@ -1,18 +1,18 @@
 #coding:utf8
 from django.shortcuts import render,HttpResponseRedirect,render_to_response
 from django.http import HttpResponse
-import time
+import time,os
 
 from .models import CompanyTable,HistoryTable,ProviderTable,ServerRoomTable,CabinetTable,EquipmentTypeTable,\
 EquipmentTable,OccupationTable,PrivateTable,ServiceTypeTable,ProjectTable,ServiceTable,NodeTable,\
-EnviromentTable,PortTable,LogPathTable
+EnviromentTable,PortTable,LogPathTable,DeployLogTable
 
 # Create your views here.
 def HelloWorld ( request ) :
     return HttpResponse ( 'hello world!' )
     
 def Company ( request ) :
-    companies= CompanyTable.objects.all() 
+    companies= CompanyTable.objects.all()
     
     if request.method == 'POST':
         companyId=request.POST.get('companyId',None)
@@ -21,9 +21,22 @@ def Company ( request ) :
             
         companyName = request.POST.get('companyName',None)
         companyFullName = request.POST.get('companyFullName',None)
-        
+        companyUploadPath = request.POST.get('companyUploadPath',None)
+        if companyUploadPath == '':
+            commonUploadPath='/var/upload/'
+            companyUploadPath=commonUploadPath+companyName
+            
+        if companyUploadPath != None:
+            if os.path.exists(companyUploadPath):
+                print('存在')
+            else:
+                print('不存在')
+                os.system('mkdir -p '+companyUploadPath)
+
         #delete
-        if request.POST.get('delSign',None) == 'true':            
+        if request.POST.get('delSign',None) == 'true':
+            uploadPath=companyObject.uploadPath
+            os.system('rm -fr '+uploadPath)
             companyObject.delete()
             new= HistoryTable()
             new.contant="del "+companyObject.name+" from company"
@@ -42,6 +55,7 @@ def Company ( request ) :
             
             new.name= companyName
             new.fullName= companyFullName
+            new.uploadPath= companyUploadPath
             new.save()
             new= HistoryTable()
             new.contant="add "+companyName+" to company"
@@ -53,6 +67,7 @@ def Company ( request ) :
             
             companyObject.name=companyName
             companyObject.fullName=companyFullName
+            companyObject.uploadPath=companyUploadPath
             localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
             companyObject.ctime= localtime
             companyObject.save()
@@ -323,6 +338,8 @@ def Equipment ( request ) :
             equipmentProvider = ProviderTable.objects.get(name = equipmentProviderName )
         
         equipmentIpAddress = request.POST.get('equipmentIpAddress',None)
+        equipmentControlPort = request.POST.get('equipmentControlPort',None)
+        print(equipmentControlPort)
         equipmentCabinetName = request.POST.get('equipmentCabinet',None)
         if equipmentCabinetName != None:
             equipmentCabinet = CabinetTable.objects.get(name = equipmentCabinetName)
@@ -353,6 +370,7 @@ def Equipment ( request ) :
             new.name= equipmentName
             new.provider= equipmentProvider
             new.ipAddress= equipmentIpAddress
+            new.controlPort= equipmentControlPort
             new.cabinet= equipmentCabinet
             new.sequence= equipmentSequence
             new.equipmentType= equipmentEquipmentType
@@ -367,6 +385,7 @@ def Equipment ( request ) :
             equipmentObject.name=equipmentName
             equipmentObject.provider=equipmentProvider
             equipmentObject.ipAddress=equipmentIpAddress
+            equipmentObject.controlPort= equipmentControlPort
             equipmentObject.cabinet=equipmentCabinet
             equipmentObject.sequence=equipmentSequence
             equipmentObject.equipmentType=equipmentEquipmentType
@@ -384,7 +403,7 @@ def Occupation ( request ) :
     
     if request.method == 'POST':
         occupationId=request.POST.get('occupationId',None)
-        if occupationId != '':
+        if occupationId != '': 
             occupationObject=OccupationTable.objects.get(id=occupationId)
             
         occupationName = request.POST.get('occupationName',None)
@@ -503,6 +522,7 @@ def ServiceType ( request ) :
             serviceTypeObject=serviceTypeObject=ServiceTypeTable.objects.get(id=serviceTypeId)
             
         serviceTypeName = request.POST.get('serviceTypeName',None)
+        serviceTypeVersion = request.POST.get('serviceTypeVersion',None)
         serviceTypePortNumber = request.POST.get('serviceTypePortNumber',None)
         serviceTypeLogPathType = request.POST.get('serviceTypeLogPathType',None)
         
@@ -524,6 +544,7 @@ def ServiceType ( request ) :
                 new.id=1
             
             new.name= serviceTypeName
+            new.version= serviceTypeVersion
             new.portNumber= serviceTypePortNumber
             new.save()
             new= HistoryTable()
@@ -534,6 +555,7 @@ def ServiceType ( request ) :
         else:
             #update
             serviceTypeObject.name=serviceTypeName
+            serviceTypeObject.version= serviceTypeVersion
             serviceTypeObject.portNumber=serviceTypePortNumber
             serviceTypeObject.logPathType=serviceTypeLogPathType
             print(serviceTypeLogPathType)
@@ -614,7 +636,6 @@ def Service ( request ) :
             
         serviceName = request.POST.get('serviceName',None)
         serviceProject = request.POST.get('serviceProject',None)
-        print(serviceProject)
         if serviceProject != None:
             serviceProjectObject=ProjectTable.objects.get(name=serviceProject)
             
@@ -637,7 +658,7 @@ def Service ( request ) :
         serviceServiceType = request.POST.get('serviceServiceType',None)
         if serviceServiceType != None:
             serviceServiceTypeObject=ServiceTypeTable.objects.get(name=serviceServiceType)
-        
+        serviceJavaVersion = request.POST.get('serviceJavaVersion',None)
         #delete
         if request.POST.get('delSign',None) == 'true':
             serviceObject.delete()
@@ -649,7 +670,6 @@ def Service ( request ) :
         #add
         if request.POST.get('serviceId',None) == '':
             new= ServiceTable()
-            
             if len(services) != 0:
                 new.id=(services[len(services)-1]).id+1
             else:
@@ -662,6 +682,7 @@ def Service ( request ) :
             new.productManager= serviceProductManagerObject
             new.operationEngineer= serviceOperationEngineerObject
             new.serviceType= serviceServiceTypeObject
+            new.javaVersion= serviceJavaVersion
             new.save()
             new= HistoryTable()
             new.contant="add "+serviceName+" to service"
@@ -677,6 +698,7 @@ def Service ( request ) :
             serviceObject.productManager= serviceProductManagerObject
             serviceObject.operationEngineer= serviceOperationEngineerObject
             serviceObject.serviceType= serviceServiceTypeObject
+            serviceObject.javaVersion= serviceJavaVersion
             localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
             serviceObject.ctime= localtime
             serviceObject.save()
@@ -841,7 +863,6 @@ def Node ( request ) :
         
         nodePortList = request.POST.get('nodePortList',None)
         nodeLogPathList = request.POST.get('nodeLogPathList',None)
-        print(nodeLogPathList)
 
         #delete
         if request.POST.get('delSign',None) == 'true':
@@ -850,17 +871,17 @@ def Node ( request ) :
             del portList[int(nodeObject.service.serviceType.portNumber)]
             for i in portList:
                 PortTable.objects.get(portNumber=i).delete()
-                print(i)
                 new= HistoryTable()
                 new.contant="del "+i+" from portTable"
                 new.save()
                 
-            logPathList=nodeLogPathList.split(',')
-            for i in logPathList:
-                LogPathTable.objects.get(logPath=i).delete()
-                new= LogPathTable()
-                new.contant="del "+i+" from LogPathTable"
-                new.save()
+            #logPathList=nodeLogPathList.split(',')
+            #for i in logPathList:
+            LogPathTableObject=LogPathTable.objects.get(logPath=nodeLogPathList , node=nodeObject.id)
+            LogPathTableObject.delete()
+            new= HistoryTable()
+            new.contant="del nodeObject.id: "+str(nodeObject.id)+" logPath: "+nodeLogPathList+" from LogPathTable"
+            new.save()
             
             nodeObject.delete()
             new= HistoryTable()
@@ -946,7 +967,8 @@ def Node ( request ) :
             #redis_cluster是autodeploy后面加redis_cluster，然后加环境-机房-项目-服务-节点
             
             commonLogPath='/'+nodeProject.company.name+'/log/autodepoly/'
-    
+            
+            
             if nodeService.serviceType.name=='tomcat':
                 nodeService.serviceType.name='java'
                 if new.service.serviceType.logPathType == 'a':
@@ -1088,11 +1110,423 @@ def Port ( request ) :
 def LogPath ( request ) :
     return HttpResponse ( 'hello world!' )
 
+    
+    
+def Unzip(srcPath,targetPath,targetChildPath,host,sshPort,sshName,eventId,node):
+    command='tar zxf '+srcPath+' -C '+targetPath
+    RemoteControl(host,sshPort,sshName,command,eventId,node)
+    temporaryPath=targetPath+targetChildPath
+    exist=RemoteFileExist(host,sshPort,sshName,temporaryPath)
+    if exist == 'exist':
+        log=host+" : "+('成功:解压缩'+srcPath)
+        DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+('失败:解压'+srcPath)
+        DeployLog(log,eventId,node)
+        log=host+" : "+'false'
+        DeployLog(log,eventId,node)
+        return log
+
+def Mv(srcPath,targetPath,host,sshPort,sshName,eventId,node):
+    command=('mv -f '+srcPath+' '+targetPath)
+    RemoteControl(host,sshPort,sshName,command,eventId,node)
+    exist=RemoteFileExist(host,sshPort,sshName,targetPath)
+    if exist == 'exist':
+        log=host+" : "+(' 成功:mv '+srcPath+' to '+targetPath)
+        DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+('失败：mv '+srcPath+' to '+targetPath)
+        DeployLog(log,eventId,node)        
+        log=host+" : "+'false'
+        DeployLog(log,eventId,node)
+        return log
+        
+def Sed(src,target,filePath,host,sshPort,sshName,eventId,node):
+    command=("grep "+src+(' ')+filePath)
+    result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    if len(result)==0:
+        log=host+" : "+'未找到: '+src+(' ')+filePath
+        DeployLog(log,eventId,node)
+    else:
+        command=("sed -i 's%"+src+"%"+target+"%g' "+filePath)
+        result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+        if len(result)==0:
+            log=host+" : "+'成功：替换 '+filePath+' : '+src+' to '+target
+            DeployLog(log,eventId,node)
+        else:
+            log=host+" : "+'失败：替换 '+filePath+' : '+src+' to '+target
+            DeployLog(log,eventId,node)
+            log=host+" : "+'false'
+            DeployLog(log,eventId,node)
+            return log
+            
+def RemoteControl(host,port,userName,command,eventId,node):
+    import paramiko,time,sys
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=userName, pkey=private_key)
+    ssh = paramiko.SSHClient()
+    ssh._transport = transport
+    log=host+' : '+command
+    DeployLog(log,eventId,node)
+    stdin, stdout, stderr = ssh.exec_command(command)
+    stderrList=stderr.readlines()
+    stdoutList=stdout.readlines()
+    result=stderrList+stdoutList
+    if len(result) != 0:
+        if len(result) !=1:
+            for i in result:
+                if len(i) ==0:
+                    break
+                log='&nbsp;&nbsp;'+i.strip('/n')
+                DeployLog(log,eventId,node)
+        else:
+            for i in result:
+                log=host+" : "+'结果：'+i.strip()
+                DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+'没有返回结果'
+        DeployLog(log,eventId,node)
+    transport.close()
+    return(result)
 
 
+def RemoterControlInvoke(host,port,userName,command,eventId,node):
+    #这个方法暂时不可用。如果想测试，可以用有道云笔记中的例子测试《python 交互式远程操作》
+    import paramiko,time,sys
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport((host,port))
+    transport.connect(username=userName, pkey=private_key)
+    a=transport.open_session()
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    a.send(command+' \n')
+    b=bytes.decode(a.recv(1024))
+    while not b.endswith("# "):
+        while not b.endswith("[y/N]: "):
+            if b.endswith("# "):
+                break
+            b=bytes.decode(a.recv(1024))
+            log=host+" : "+b.strip()
+            DeployLog(log,eventId,node)
+        if b.endswith("[y/N]: "):
+            a.send('y\n')
+        else:
+            a.send('\n')
+        b=bytes.decode(a.recv(1024))
+        log=host+" : "+b.strip()
+        DeployLog(log,eventId,node)
+    log=host+" : "+'remote command over'
+    DeployLog(log,eventId,node)
+    a.close()
+    transport.close()
+
+        
+
+def RemoteFileExist(host,port,userName,path):
+    import paramiko,time,sys
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=userName, pkey=private_key)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    try:
+        sftp.stat(path)
+        result="exist"
+        transport.close()
+    except IOError:
+        result="not exist"
+    return(result)
+    
+
+def addRemoteUser(userName,host,sshPort,sshName,eventId,node):
+    command="grep "+userName+" /etc/passwd"
+    result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    if len(result) == 0:
+        command="useradd "+userName
+        result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+        command="grep "+userName+" /etc/passwd"
+        result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+        if len(result) == 0:
+            log=host+" : "+'失败：创建'+userName
+            DeployLog(log,eventId,node)
+            log=host+" : "+'false'
+            DeployLog(log,eventId,node)
+            return log
+            
+def addRemoteGroup(groupName,host,sshPort,sshName,eventId,node):
+    command="grep "+groupName+" /etc/group"
+    result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    if len(result) == 0:
+        command="groupadd "+groupName
+        result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+        command="grep "+groupName+" /etc/group"
+        result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+        if len(result) == 0:
+            log=host+" : "+'失败：创建'+groupName
+            DeployLog(log,eventId,node)
+            log=host+" : "+'false'
+            DeployLog(log,eventId,node)
+            return log
+
+        
+def Upload(host,sshPort,sshName,oldFileName,newFileName,eventId,node):
+    log=host+" : "+'开始上传: '+newFileName
+    DeployLog(log,eventId,node)
+    import paramiko,time,sys
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport((host,sshPort))
+    transport.connect(username=sshName, pkey=private_key)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    sftp.put(oldFileName,newFileName)
+    transport.close()
+    exist=RemoteFileExist(host,sshPort,sshName,newFileName)
+    if exist =='exist':
+        log=host+" : "+('成功：上传完成 ,路径：'+newFileName)
+        DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+('失败：上传失败 ,路径：'+newFileName)
+        DeployLog(log,eventId,node)
+        log=host+" : "+'false'
+        DeployLog(log,eventId,node)
+        return log
+
+def Rm(host,sshPort,sshName,path,eventId,node):
+    log=host+" : "+'删除: '+path
+    DeployLog(log,eventId,node)
+    command='rm -rf '+path
+    RemoteControl(host,sshPort,sshName,command,eventId,node)
+    exist=RemoteFileExist(host,sshPort,sshName,path)
+    if exist =='exist':
+        log=host+" : "+('失败：删除,路径：'+path)
+        DeployLog(log,eventId,node)
+        log=host+" : "+'false'
+        DeployLog(log,eventId,node)
+        return log
+    else:
+        log=host+" : "+('成功：删除 ,路径：'+path)
+        DeployLog(log,eventId,node)
+
+        
+'''
+def CheckUploadAndContinu(host,sshPort,sshName,path,eventId,node):
+    exist=RemoteFileExist(host,sshPort,sshName,path)
+    if exist =='exist':
+        log=host+" : "+('成功上传 ,路径：'+path)
+        DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+('失败上传 ,路径：'+path)
+        DeployLog(log,eventId,node)
+        log=host+" : "+'false'
+        DeployLog(log,eventId,node)
+        return log
+'''
+def StartApp(appName,appPort,host,sshPort,sshName,eventId,node,company):
+    log=host+" : "+appName+'执行启动'
+    DeployLog(log,eventId,node)
+    command=('su - '+company+' -c "/etc/init.d/'+appName+' start"')
+    #command="/etc/init.d/"+appName+" start"
+    RemoteControl(host,sshPort,sshName,command,eventId,node)
+    time.sleep(10)
+    command="netstat -tupln |grep "+str(appPort)+"|awk -F ' |:' '{print $19}'"
+    result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    if len(result)!=0:
+        if result[0].strip() == appPort:
+            log=host+" : "+'成功启动：'+appName
+            DeployLog(log,eventId,node)
+            return log
+    else:
+        log=host+" : "+'失败启动：'+appName
+        DeployLog(log,eventId,node)
+        log=host+" : "+'false'
+        DeployLog(log,eventId,node)
+        return log
+
+def CheckPathAndAdd(host,sshPort,sshName,path,eventId,node):
+    exist=RemoteFileExist(host,sshPort,sshName,path)
+    if exist == 'exist': 
+        log=host+" : "+path+' 存在'
+        DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+path+' 不存在，执行创建作业'
+        DeployLog(log,eventId,node)
+        RemoteControl(host,sshPort,sshName,'mkdir -pv '+path,eventId,node)
+        exist=RemoteFileExist(host,sshPort,sshName,path)
+        if exist == 'exist': 
+            log=host+" : "+'成功创建:'+path
+            DeployLog(log,eventId,node)
+        else:
+            log=host+" : "+'失败创建'+path
+            DeployLog(log,eventId,node)
+            log=host+" : "+'false'
+            DeployLog(log,eventId,node)
+            return log
 
 
+        
+def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,eventId,node,tomcatVersion,company,javaVersion,appName):
+    softSrcPath='/'+company+'/src'
+    tomcatSrcPath=softSrcPath+'/apache-tomcat-'+tomcatVersion+'.tar.gz'
+    exist=RemoteFileExist(host,sshPort,sshName,tomcatSrcPath)
+    if exist != 'exist':
+        log=host+" : "+(tomcatSrcPath+'不存在，需要上传')
+        DeployLog(log,eventId,node)
+        CheckPathAndAdd(host,sshPort,sshName,softSrcPath,eventId,node)
+        Upload(host,sshPort,sshName,tomcatSrcPath,tomcatSrcPath,eventId,node)
+        log=host+" : "+'可以开始安装tomcat了。'
+        DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+(tomcatSrcPath+' 已存在,不需要上传，可以开始安装tomcat了。')
+        DeployLog(log,eventId,node)
+    appPathList=appPath.split('/')
+    appPathListLen=len(appPathList)
+    commonAppPath=''
+    j=0
+    for i in appPathList:
+        commonAppPath+=(i+'/')
+        j+=1
+        if j==(appPathListLen-1):
+            break
+    CheckPathAndAdd(host,sshPort,sshName,commonAppPath,eventId,node)
+    temporaryPath=(commonAppPath+'apache-tomcat-'+tomcatVersion)
+    Unzip(tomcatSrcPath,commonAppPath,'apache-tomcat-'+tomcatVersion,host,sshPort,sshName,eventId,node)
+    Mv(temporaryPath,appPath,host,sshPort,sshName,eventId,node)
+    #替换服务文件内容
+    tomcatHttpPort=tomcatPortList[0]
+    tomcatDebugPort=tomcatPortList[1]
+    tomcatShutdownPort=tomcatPortList[2]
+    Sed(str(8080),str(tomcatHttpPort),appPath+"/conf/server.xml",host,sshPort,sshName,eventId,node)
+    Sed(str(8009),str(tomcatDebugPort),appPath+"/conf/server.xml",host,sshPort,sshName,eventId,node)
+    Sed(str(8005),str(tomcatShutdownPort),appPath+"/conf/server.xml",host,sshPort,sshName,eventId,node)
+    appAccessLogDir='/'+company+"/log/autodeploy/tomcat/"+appName+"/access"
+    Sed('logs',appAccessLogDir,appPath+"/conf/server.xml",host,sshPort,sshName,eventId,node)
+    CheckPathAndAdd(host,sshPort,sshName,appAccessLogDir,eventId,node)
+    appCoreLogDir='/'+company+"/log/autodeploy/tomcat/"+appName+"/core"
+    Sed('\${catalina.base}/logs',appCoreLogDir,appPath+"/conf/logging.properties",host,sshPort,sshName,eventId,node)
+    Sed('FINE','SEVERE',appPath+"/conf/logging.properties",host,sshPort,sshName,eventId,node)
+    CheckPathAndAdd(host,sshPort,sshName,appCoreLogDir,eventId,node)
+    
+    #插入启动参数
+    javaCommonPath='/'+company+'/app/java/'
+    javaHome=javaCommonPath+'/'+javaVersion
+    command=("sed -i '96c JAVA_HOME=\""+javaHome+"\"' "+appPath+"/bin/catalina.sh")
+    result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    log=host+" : "+'成功：替换java路径'
+    DeployLog(log,eventId,node)
+    appDebugPath='/'+company+"/log/autodeploy/tomcat/"+appName+"/debug"
+    CheckPathAndAdd(host,sshPort,sshName,appDebugPath,eventId,node)
+    Memory='512M'    
+    javaOpts="-server -Xms"+Memory+" -Xmx"+Memory+" -XX:PermSize=256m -XX:MaxPermSize=256m -Xss512k -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintGCTimeStamps -Xloggc:"+appDebugPath+"/gc.log.$(date +%Y%m%d_%H%M%S) -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath="+appDebugPath+"/dump.$(date +%Y%m%d_%H%M%S)  -Dfile.encoding=UTF-8 -Djava.awt.headless=true"
+    command=("sed -i '97c JAVA_OPTS=\""+javaOpts+"\"' "+appPath+"/bin/catalina.sh")
+    result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    time.sleep(5)
+    log=host+" : "+'成功:替换javaOpts'
+    DeployLog(log,eventId,node)
+    Rm(host,sshPort,sshName,appPath+'/webapps/*',eventId,node)
+    #部署系统默认启动文件/etc/init.d/*
+    tomcatStartFileTemplate=softSrcPath+'/'+tomcatVersion+'-tomcat-init.sh'
+    appTomcatStartFile='/etc/init.d/'+appName
+    Upload(host,sshPort,sshName,tomcatStartFileTemplate,appTomcatStartFile,eventId,node)
+    #替换tomcatHome
+    Sed('tomcatHome',appPath,appTomcatStartFile,host,sshPort,sshName,eventId,node)
+    #替换tomcatUser
+    Sed('tomcatUser',company,appTomcatStartFile,host,sshPort,sshName,eventId,node)
+    #替换tomcatName
+    Sed('tomcatName',appName,appTomcatStartFile,host,sshPort,sshName,eventId,node)
+    #创建tomcat运行用户
+    addRemoteUser(company,host,sshPort,sshName,eventId,node)
+    #赋予权限
+    command="chmod +x /etc/init.d/"+appName
+    result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    pathList=[appPath,appDebugPath,appAccessLogDir,appCoreLogDir,"/etc/init.d/"+appName]
+    for i in pathList:
+        command="chown -R "+company+"."+company+" "+i
+        result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+    #检测java是否存在
+    exist=RemoteFileExist(host,sshPort,sshName,javaHome)
+    if exist == 'exist':
+        log=host+" : "+(javaHome+'存在')
+        DeployLog(log,eventId,node)
+    else:
+        log=host+" : "+(javaHome+'不存在')
+        DeployLog(log,eventId,node)
+        javaSoftSrcPath=softSrcPath+'/'+javaVersion+'.tar.gz'
+        Upload(host,sshPort,sshName,javaSoftSrcPath,javaSoftSrcPath,eventId,node)
+        CheckPathAndAdd(host,sshPort,sshName,javaCommonPath,eventId,node)
+        Unzip(javaSoftSrcPath,javaCommonPath,javaVersion,host,sshPort,sshName,eventId,node)
+    StartApp(appName,tomcatHttpPort,host,sshPort,sshName,eventId,node,company)
+    #sftp.get('/filedir/oldtext.txt', r'C:\Users\duany_000\Desktop\oldtext.txt')
 
+
+def DeployLog(log,eventId,node):
+    new=DeployLogTable()
+    new.log=log
+    new.eventId=eventId
+    new.node=node
+    new.save()
+
+def Do(request):
+    companyName='rgec'
+    #这里以后会采集用户信息，来判断他的公司名称。目前就先写死。
+    result=''
+    if request.method == 'POST':
+        eventId=request.POST.get('eventId',None)
+        nodeId = request.POST.get('nodeId',None)
+        if nodeId != '':
+            nodeObject=NodeTable.objects.get(id=nodeId)
+            enviroment=nodeObject.enviroment.name
+            serverRoom=nodeObject.serverRoom.name
+            project=nodeObject.project.name
+            service=nodeObject.service.name
+            serviceType=nodeObject.service.serviceType.name
+            host=nodeObject.ip.ipAddress
+            controlPort=nodeObject.ip.controlPort
+            portList=(nodeObject.portList.split(','))
+            appName=enviroment+'-'+serverRoom+'-'+project+'-'+service
+            company=nodeObject.project.company.name
+            if serviceType=='tomcat':
+                tomcatVersion=nodeObject.service.serviceType.version 
+                javaVersion=nodeObject.service.javaVersion
+                appPath='/'+companyName+'/app/autodepoly/'+serviceType+'/'+appName+'-tomcat-'+tomcatVersion
+                exist=RemoteFileExist(host,int(controlPort),'root',appPath)
+                if exist != 'exist':
+                    log=host+" : "+(appPath+'目录不存在，需要安装tomcat')
+                    DeployLog(log,eventId,nodeObject)
+                    result=InstallTomcat(host,'root',int(controlPort),portList,appPath,eventId,nodeObject,tomcatVersion,company,javaVersion,appName)
+                    if result == 'false':
+                        return HttpResponse('构建失败')
+                log=host+" : "+(appPath+'目录已存在，此时，该开始打包')
+                DeployLog(log,eventId,nodeObject)
+                log=host+" : "+('done')
+                DeployLog(log,eventId,nodeObject)
+                return HttpResponse('done')
+        else:
+            result='请先提交，然后在执行'
+            return HttpResponse(result)
+    return HttpResponse(result)
+
+def ViewDeployLog_nodeId(request,id):
+    if request.method=='GET':
+        #获取eventid的列表
+        eventIds=[]
+        node=NodeTable.objects.get(id=id)
+        for i in DeployLogTable.objects.filter(node=node):
+            #实在不会自动获取表名了
+            eventIds.append(i.eventId)
+        eventIds=list(set(eventIds))
+        eventIds=sorted(eventIds,reverse=True)
+    return render_to_response('viewDeployLog.html',{'eventIds':eventIds})
+
+def ViewDeployLog_eventId(request,id):
+    if request.method == 'POST': 
+        sign=request.POST.get('sign',None)
+    logs=[]
+    if sign=='getLogs':
+        logIdObjects=DeployLogTable.objects.filter(eventId=id)
+        for i in logIdObjects:
+            log=i.log
+            logs.append(log+'@')
+    return HttpResponse(logs)
 
 
 

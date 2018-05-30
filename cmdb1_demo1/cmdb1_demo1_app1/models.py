@@ -9,6 +9,7 @@ class CompanyTable ( models.Model ) :
     id = models.AutoField('ID',primary_key=True)
     name = models.CharField(max_length=50,null=True)
     fullName = models.CharField(max_length=50,null=True)
+    uploadPath = models.CharField(max_length=50,null=True)
     localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
     ctime= models.CharField(max_length=49,null=True,default=localtime)
     def __unicode__(self):
@@ -68,6 +69,7 @@ class EquipmentTable ( models.Model ) :
     ctime= models.CharField(max_length=49,null=True,default=localtime)
     provider= models.ForeignKey(ProviderTable,null=True, blank=True,on_delete=models.CASCADE)
     ipAddress= models.CharField(max_length=50,null=True)
+    controlPort= models.CharField(max_length=50,null=True)
     cabinet= models.ForeignKey(CabinetTable,null=True, blank=True,on_delete=models.CASCADE)
     sequence= models.CharField(max_length=50,null=True)
     equipmentType= models.ForeignKey(EquipmentTypeTable,null=True, blank=True,on_delete=models.CASCADE)
@@ -98,6 +100,7 @@ class PrivateTable ( models.Model ) :
 class ServiceTypeTable ( models.Model ) :
     id = models.AutoField('ID',primary_key=True)
     name = models.CharField(max_length=50,null=True)
+    version = models.CharField(max_length=50,null=True)
     localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
     portNumber= models.CharField(max_length=49,null=True,default=localtime)
     ctime= models.CharField(max_length=49,null=True,default=localtime)  
@@ -125,6 +128,7 @@ class ServiceTable ( models.Model ) :
     productManager= models.ForeignKey(PrivateTable,null=True, blank=True,on_delete=models.CASCADE,related_name = "productManager")
     operationEngineer= models.ForeignKey(PrivateTable,null=True, blank=True,on_delete=models.CASCADE,related_name = "operationEngineer")
     serviceType= models.ForeignKey(ServiceTypeTable,null=True, blank=True,on_delete=models.CASCADE)
+    javaVersion = models.CharField(max_length=50,null=True)
     def __unicode__(self):
         return self.name
         
@@ -177,3 +181,13 @@ class HistoryTable ( models.Model ) :
     ctime= models.CharField(max_length=49,null=True,default=localtime)
     def __unicode__(self):
         return self.id
+
+class DeployLogTable (models.Model ):
+    id = models.AutoField('ID',primary_key=True)
+    eventId = models.CharField(max_length=5000,null=True)
+    log=models.CharField(max_length=5000,null=True)
+    localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
+    ctime= models.CharField(max_length=49,null=True,default=localtime)
+    node = models.ForeignKey(NodeTable,null=True, blank=True,on_delete=models.CASCADE)
+    def __unicode__(self):
+        return self.eventId

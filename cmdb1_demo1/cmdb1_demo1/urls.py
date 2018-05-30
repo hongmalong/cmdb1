@@ -14,7 +14,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path,re_path
 import cmdb1_demo1_app1.views
 
 urlpatterns = [
@@ -35,5 +35,10 @@ urlpatterns = [
     path('node',cmdb1_demo1_app1.views.Node),
     path('port',cmdb1_demo1_app1.views.Port),
     path('logPath',cmdb1_demo1_app1.views.LogPath),
+    path('do',cmdb1_demo1_app1.views.Do),
+
+    #path('upload',cmdb1_demo1_app1.views.Upload),
+    re_path('viewDeployLog_nodeId_(?P<id>[\w]+)$',cmdb1_demo1_app1.views.ViewDeployLog_nodeId),
+    re_path('viewDeployLog_eventId_(?P<id>[\w]+)$',cmdb1_demo1_app1.views.ViewDeployLog_eventId),
 
 ]
