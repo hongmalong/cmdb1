@@ -1,11 +1,11 @@
 #coding:utf8
 from django.shortcuts import render,HttpResponseRedirect,render_to_response
 from django.http import HttpResponse
-import time,os
+import time,os,sys,re,paramiko
 
 from .models import CompanyTable,HistoryTable,ProviderTable,ServerRoomTable,CabinetTable,EquipmentTypeTable,\
 EquipmentTable,OccupationTable,PrivateTable,ServiceTypeTable,ProjectTable,ServiceTable,NodeTable,\
-EnviromentTable,PortTable,LogPathTable,DeployLogTable
+EnviromentTable,PortTable,LogPathTable,DeployLogTable,DeployHostTable
 
 # Create your views here.
 def HelloWorld ( request ) :
@@ -144,7 +144,12 @@ def ServerRoom ( request ) :
     companies= CompanyTable.objects.all()
     providers= ProviderTable.objects.all()
     serverRooms= ServerRoomTable.objects.all()
-    
+    equipments=EquipmentTable.objects.all()
+    serverRoomsNew=[]
+    for serverRoom in serverRooms: 
+        deployHost=DeployHostTable.objects.get(serverRoom=serverRoom)
+        serverRoom.deployHost=deployHost.host.ipAddress
+        serverRoomsNew.append(serverRoom)
     if request.method == 'POST':
         serverRoomId = request.POST.get('serverRoomId',None)
         if serverRoomId != '':
@@ -164,7 +169,7 @@ def ServerRoom ( request ) :
         serverRoomEmail = request.POST.get('serverRoomEmail',None)
         serverRoomAddress = request.POST.get('serverRoomAddress',None)
         serverRoomWebsite = request.POST.get('serverRoomWebsite',None)
-        
+        serverRoomDeployHost= request.POST.get('serverRoomDeployHost',None)
         #delete
         if request.POST.get('delSign',None) == 'true':            
             serverRoomObject.delete()
@@ -191,6 +196,10 @@ def ServerRoom ( request ) :
             new.address= serverRoomAddress
             new.website= serverRoomWebsite
             new.save()
+            new = DeployHostTable()
+            new.serverRoom=ServerRoomTable.objects.get(name=serverRoomName)
+            new.host=EquipmentTable.objects.get(ipAddress=serverRoomDeployHost)
+            new.save()
             new= HistoryTable()
             new.contant="add "+serverRoomName+" to serverRoom"
             new.save()
@@ -209,11 +218,15 @@ def ServerRoom ( request ) :
             localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
             serverRoomObject.ctime= localtime
             serverRoomObject.save()
+            deployHostObject = DeployHostTable.objects.get(serverRoom=serverRoomObject)
+            deployHostObject.host=EquipmentTable.objects.get(ipAddress=serverRoomDeployHost)
+            deployHostObject.save()
+            
             new= HistoryTable()
             new.contant="update "+serverRoomName+" to serverRoom"
             new.save()
             return HttpResponse('serverRoom '+serverRoomName+' update scusses!')
-    return render_to_response ('serverRoom.html',{'serverRooms':serverRooms,'providers':providers,'companies':companies})
+    return render_to_response ('serverRoom.html',{'serverRooms':serverRoomsNew,'providers':providers,'companies':companies,'equipments':equipments})
 
 def Cabinet ( request ) :
     serverRooms = ServerRoomTable.objects.all()
@@ -659,6 +672,11 @@ def Service ( request ) :
         if serviceServiceType != None:
             serviceServiceTypeObject=ServiceTypeTable.objects.get(name=serviceServiceType)
         serviceJavaVersion = request.POST.get('serviceJavaVersion',None)
+        serviceCodeSrc = request.POST.get('serviceCodeSrc',None)
+        serviceMavenCodePath = request.POST.get('serviceMavenCodePath',None)
+        serviceTargetFilePath = request.POST.get('serviceTargetFilePath',None)
+        serviceMavenParameter = request.POST.get('serviceMavenParameter',None)
+
         #delete
         if request.POST.get('delSign',None) == 'true':
             serviceObject.delete()
@@ -683,7 +701,11 @@ def Service ( request ) :
             new.operationEngineer= serviceOperationEngineerObject
             new.serviceType= serviceServiceTypeObject
             new.javaVersion= serviceJavaVersion
-            new.save()
+            new.codeSrc=serviceCodeSrc
+            new.mavenCodePath=serviceMavenCodePath
+            new.TargetFilePath=serviceTargetFilePath
+            new.mavenParameter=serviceMavenParameter
+
             new= HistoryTable()
             new.contant="add "+serviceName+" to service"
             new.save()
@@ -699,6 +721,11 @@ def Service ( request ) :
             serviceObject.operationEngineer= serviceOperationEngineerObject
             serviceObject.serviceType= serviceServiceTypeObject
             serviceObject.javaVersion= serviceJavaVersion
+            serviceObject.codeSrc=serviceCodeSrc
+            serviceObject.mavenCodePath=serviceMavenCodePath
+            serviceObject.targetFilePath=serviceTargetFilePath
+            serviceObject.mavenParameter=serviceMavenParameter
+
             localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
             serviceObject.ctime= localtime
             serviceObject.save()
@@ -853,7 +880,7 @@ def Node ( request ) :
             
         nodeServiceName = request.POST.get('nodeService',None)
         if nodeServiceName != None:
-            nodeService=ServiceTable.objects.get(name=nodeServiceName)
+            nodeService=ServiceTable.objects.get(name=nodeServiceName ,project=nodeProject)
         
         nodeNodeNumber = request.POST.get('nodeNodeNumber',None)
         
@@ -863,7 +890,9 @@ def Node ( request ) :
         
         nodePortList = request.POST.get('nodePortList',None)
         nodeLogPathList = request.POST.get('nodeLogPathList',None)
-
+        nodeBranch = request.POST.get('nodeBranch',None)
+        nodeSpringBootStartProfile = request.POST.get('nodeSpringBootStartProfile',None)
+        nodeMemory_value = request.POST.get('nodeMemory_value',None)
         #delete
         if request.POST.get('delSign',None) == 'true':
 
@@ -968,19 +997,24 @@ def Node ( request ) :
             
             commonLogPath='/'+nodeProject.company.name+'/log/autodepoly/'
             
-            
-            if nodeService.serviceType.name=='tomcat':
-                nodeService.serviceType.name='java'
-                if new.service.serviceType.logPathType == 'a':
-                    logPath=commonLogPath+nodeService.serviceType.name+'/'+nodeEnviromentName+'-'+nodeServerRoomName+'-'+nodeProjectName+'-'+nodeServiceName
-                elif new.service.serviceType.logPathType == 'b':
-                    logPath=commonLogPath+nodeService.serviceType.name+'/'+nodeEnviromentName+'-'+nodeServerRoomName+'-'+nodeProjectName+'-'+nodeServiceName+'-'+nodeNodeNumber
+            serviceTypes=['tomcat','sprintBoot','dubbo']
+            for i in serviceTypes:
+                if nodeService.serviceType.name==i:
+                    nodeService.serviceType.name='java'
+                    if new.service.serviceType.logPathType == 'a':
+                        logPath=commonLogPath+nodeService.serviceType.name+'/'+nodeEnviromentName+'-'+nodeServerRoomName+'-'+nodeProjectName+'-'+nodeServiceName
+                    elif new.service.serviceType.logPathType == 'b':
+                        print('b')
+                        logPath=commonLogPath+nodeService.serviceType.name+'/'+nodeEnviromentName+'-'+nodeServerRoomName+'-'+nodeProjectName+'-'+nodeServiceName+'-'+nodeNodeNumber
             
             logPathObject=LogPathTable()
             logPathObject.logPath=logPath
             logPathObject.node=new.id
             logPathObject.save()
             new.logPathList= logPath
+            new.branch=nodeBranch
+            new.springBootStartProfile = nodeSpringBootStartProfile
+            new.memory = nodeMemory_value
             new.save()
             new= HistoryTable()
             new.contant="add "+nodeEnviroment.name+"_"+nodeServerRoom.name+"_"+nodeProject.name+"_"+\
@@ -1092,6 +1126,9 @@ def Node ( request ) :
             nodeObject.logPathList= newNodeLogPathList
             localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
             nodeObject.ctime= localtime
+            nodeObject.branch=nodeBranch
+            nodeObject.springBootStartProfile = nodeSpringBootStartProfile
+            nodeObject.memory = nodeMemory_value
             nodeObject.save()
             new= HistoryTable()
             new.contant="update "+nodeEnviroment.name+"_"+nodeServerRoom.name+"_"+nodeProject.name+"_"+\
@@ -1110,18 +1147,24 @@ def Port ( request ) :
 def LogPath ( request ) :
     return HttpResponse ( 'hello world!' )
 
-    
-    
 def Unzip(srcPath,targetPath,targetChildPath,host,sshPort,sshName,eventId,node):
-    command='tar zxf '+srcPath+' -C '+targetPath
-    RemoteControl(host,sshPort,sshName,command,eventId,node)
+    CheckPathAndAdd(host,sshPort,sshName,targetPath,eventId,node)
+    #outLogFile=targetPath+'/nohup.out'
+    command='tar zxf '+srcPath+' -C '+targetPath+'\n'
+    #command='yum install httpd'
+    #RemoteControl(host,sshPort,sshName,command,eventId,node)
+
+    RemoterControlInvoke4ok13(host,sshPort,sshName,command,eventId,node)
+
     temporaryPath=targetPath+targetChildPath
+    #time.sleep(3)
     exist=RemoteFileExist(host,sshPort,sshName,temporaryPath)
     if exist == 'exist':
-        log=host+" : "+('成功:解压缩'+srcPath)
+        log=host+" : "+'成功:解压缩'+srcPath+' to '+temporaryPath
         DeployLog(log,eventId,node)
+        return 'done'
     else:
-        log=host+" : "+('失败:解压'+srcPath)
+        log=host+" : "+'失败:解压'+srcPath
         DeployLog(log,eventId,node)
         log=host+" : "+'false'
         DeployLog(log,eventId,node)
@@ -1142,7 +1185,7 @@ def Mv(srcPath,targetPath,host,sshPort,sshName,eventId,node):
         return log
         
 def Sed(src,target,filePath,host,sshPort,sshName,eventId,node):
-    command=("grep "+src+(' ')+filePath)
+    command=("grep -n "+src+' '+filePath)
     result=RemoteControl(host,sshPort,sshName,command,eventId,node)
     if len(result)==0:
         log=host+" : "+'未找到: '+src+(' ')+filePath
@@ -1179,6 +1222,9 @@ def RemoteControl(host,port,userName,command,eventId,node):
                 if len(i) ==0:
                     break
                 log='&nbsp;&nbsp;'+i.strip('/n')
+                if '正在检出文件' in log:
+                    #这一步出现在git拉取代码文件的过程中
+                    break
                 DeployLog(log,eventId,node)
         else:
             for i in result:
@@ -1188,8 +1234,7 @@ def RemoteControl(host,port,userName,command,eventId,node):
         log=host+" : "+'没有返回结果'
         DeployLog(log,eventId,node)
     transport.close()
-    return(result)
-
+    return result
 
 def RemoterControlInvoke(host,port,userName,command,eventId,node):
     #这个方法暂时不可用。如果想测试，可以用有道云笔记中的例子测试《python 交互式远程操作》
@@ -1201,29 +1246,1747 @@ def RemoterControlInvoke(host,port,userName,command,eventId,node):
     a.settimeout(100)
     a.get_pty()
     a.invoke_shell()
-    a.send(command+' \n')
-    b=bytes.decode(a.recv(1024))
-    while not b.endswith("# "):
-        while not b.endswith("[y/N]: "):
-            if b.endswith("# "):
-                break
-            b=bytes.decode(a.recv(1024))
-            log=host+" : "+b.strip()
-            DeployLog(log,eventId,node)
-        if b.endswith("[y/N]: "):
-            a.send('y\n')
-        else:
-            a.send('\n')
-        b=bytes.decode(a.recv(1024))
-        log=host+" : "+b.strip()
-        DeployLog(log,eventId,node)
-    log=host+" : "+'remote command over'
+    log=host+" : "+command
     DeployLog(log,eventId,node)
+    a.send(command+' \n')
+    b=bytes.decode(a.recv(10240))
+    log=host+" : "+b+' 开始循环等待反馈'
+    DeployLog(log,eventId,node)
+    #如果b不以#结束，就执行循环
+    i=1
+    while not b.endswith("# "):
+        #循环的过程是，再去获取b，存入数据库，比较它是否是#空格结尾
+        b=bytes.decode(a.recv(10240))
+        #由于获取频率太快，所以经常一句话获取不完，所以，当收到的结果结尾不包含空格，也就是不是一句完整的话，的时候，不往数据库里存数据。直接进行下一次循环
+        #if not b.endswith(" "):
+        #   continue
+        #i=1
+        ##正则可以用多个分隔符进行分割            
+        #c=re.split('["\r\n""\r"]',b)            
+        #for j in c:            
+        #    print(len(j))            
+        #    if len(j) == 0:            
+        #        continue            
+        #        #continue停止本次循环            
+        #    log=host+" : 第"+str(i)+'次循环 '+j            
+        #    DeployLog(log,eventId,node)            
+        #if 'Progress' in b:
+        #    continue
+        log=host+" : 第"+str(i)+'次循环 '+b            
+        DeployLog(log,eventId,node) 
+        #这里获取的速度太快了，可能获取的结果不是一句完整的话，目前还没有办法解决这个现象。
+        i+=1
+        if b.endswith(' [y/N]: '):
+            a.send('y\n')
+        #以后有别的判断的，可以修改判断值和发送值。来实现自动应答。
+        #上面的内容保留是因为正则的使用，需要留底。
+            
+            
+
+    #i=1
+    #正则可以用多个分隔符进行分割
+    #c=re.split('["\r\n""\r"]',b)
+    #for j in c:
+    #    print(len(j))
+    #    if len(j) == 0:
+    #       continue
+    #       #continue停止本次循环
+    #    log=host+" : 第"+str(i)+'次循环 '+j
+    #    DeployLog(log,eventId,node)
+    #    i+=1
     a.close()
     transport.close()
 
-        
+def RemoterControlInvoke4ok(host,port,userName,commands,eventId,node):
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #command='yum install httpd \n'
+    #command='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/ \n'
 
+    #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;/bin/ls -l \n'
+
+    #commands='cd /tmp \n;pwd \n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y=str.encode('[[1;33m')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    
+    needReplaceList=[p,s,t,v,w,x,y,z,z1,z2,z6,z11]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print((b.decode()).strip('\n'))
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息')
+        n=1
+        while not b.endswith(c):
+            for u in needReplaceList:
+                b=b.replace(u,g)
+                #print(b)
+            if b.endswith(d):
+                b=b.replace(k,g)
+                #print(b)
+                bList=b.split(d)
+                for q in bList:
+                    if q == g:
+                        continue
+                    else:
+                        DeployLog(host+' : '+q.decode(),eventId,node)
+                        ###print(q.decode())
+                b=a.recv(10240)
+            else:
+                if not b.endswith(f):
+                    b+=a.recv(10240)
+                #print(b)
+            #print('第'+str(n)+'次获取到的消息是：上面的值。判断b的值是否是#空格结尾，如果是，就结束循环。如果不是，就进行下一次循环')
+            n+=1
+            #print('n is: '+str(n))
+        #print(b)
+        #for u in needReplaceList:
+        #    b=b.replace(u,g)
+        bList=b.split(f)
+        z3=g
+        for q in bList:
+            if q == g:
+                continue
+            elif q== l:
+                continue
+            else:
+                if q.endswith(l):
+                    ##print('q 是以空格结尾的，不要打印q，而是继承它')
+                    if q.endswith(c):
+                        z4=q.replace(d,g)
+                        DeployLog(host+' : '+z4.decode(),eventId,node)
+                        ###print(z4.decode())
+                    else:
+                        z3=q
+                else:
+                    ##print('q 不是以空格结尾的,打印它。首先继承上次循环的结果')
+                    q=z3+q
+                    q=q.replace(d,g)
+                    DeployLog(host+' : '+q.decode(),eventId,node)
+                    ###print(q.decode())
+        ##print('目前b的结果是#空格结束，理论上再次获取会是一直等待，所以可以发送第'+str(m)+'条命令了')
+        a.send(command)
+        ##print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+        b=a.recv(10240)
+        #print(b.replace(k,g))
+            
+        if m==len(commandList):
+            ##print('此时已经循环到最后一条命令，要请求这条命令的运行结果')
+            b=a.recv(10240)
+            #print(b)
+            if not b.endswith(c):
+                while not b.endswith(c):
+                    if not b.endswith(d):
+                        b+=a.recv(10240)
+                        #print('b不以#结束')
+                    else:
+                        #print(b)
+                        for u in needReplaceList:
+                            b=b.replace(u,g)
+                        bList=b.split(d)
+                        for z8 in bList:
+                            if z8!=g:
+                                z8=z8.replace(f,g)
+                                DeployLog(host+' : '+z8.decode(),eventId,node)
+                                ###print(z8.decode())
+                        b=a.recv(10240)
+            else:
+                #print(b)
+                for u in needReplaceList:
+                    b=b.replace(u,g)
+                #print(b)
+                z9=str.encode('\r\n')
+                bList=b.split(z9)
+                #print(bList)
+                for  z10 in bList:
+                    if z10 != g:
+                        DeployLog(host+' : '+z10.decode(),eventId,node)
+                        ###print(z10.decode())
+            
+            ##print('while循环结束')
+        m+=1
+        
+    
+    ##print('结束for 循环')
+    
+    a.close()
+    transport.close()
+
+def RemoterControlInvoke4ok2(host,port,userName,commands,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #command='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y=str.encode('[[1;33m')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    
+    needReplaceList=[p,s,t,v,w,x,y,z,z1,z2,z6,z11]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        print(b)
+        print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=l:
+                        print(i)
+                b=a.recv(10240)
+                print('分完了片，在获取b，它的值是:')
+                print(b)
+            else:
+                print('b,不是以n结尾，叠加它')
+                print('b,叠加前是')
+                print(b)
+                z16=a.recv(10240)
+                print('z16的值是')
+                print(z16)
+                print('开始叠加')
+                b=b+z16
+                print('叠加后是')
+                print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+
+def RemoterControlInvoke4ok3(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y=str.encode('[[1;33m')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    
+    needReplaceList=[p,s,t,v,w,x,y,z,z1,z2,z6,z11]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        print(b)
+        print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        print(i)
+                b=a.recv(10240)
+                print('分完了片，在获取b，它的值是:')
+                print(b)
+            else:
+                print('b不是以n结尾，叠加它')
+                print('b叠加前是')
+                print(b)
+                print('b是否以[y/N]: 结尾，如果是，就发送y\n,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                print('z16的值是')
+                print(z16)
+                print('开始叠加')
+                b=b+z16
+                print('叠加后是')
+                print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+    
+def RemoterControlInvoke4ok4(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        print(b)
+        print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        print(i)
+                b=a.recv(10240)
+                print('分完了片，在获取b，它的值是:')
+                print(b)
+            else:
+                print('b不是以n结尾，叠加它')
+                print('b叠加前是')
+                print(b)
+                print('b是否以[y/N]: 结尾，如果是，就发送y\n,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                print('z16的值是')
+                print(z16)
+                print('开始叠加')
+                b=b+z16
+                print('叠加后是')
+                print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+    
+def RemoterControlInvoke4ok5(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉\r
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        print(b)
+        print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        print(i)
+                b=a.recv(10240)
+                print('分完了片，在获取b，它的值是:')
+                print(b)
+            else:
+                print('b不是以n结尾，叠加它')
+                print('b叠加前是')
+                print(b)
+                print('b是否以[y/N]: 结尾，如果是，就发送y\n,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                print('z16的值是')
+                print(z16)
+                print('开始叠加')
+                b=b+z16
+                print('叠加后是')
+                print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+    
+def RemoterControlInvoke4ok6(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        bList=b.split(d)
+        print('这是在while之上分片处理的过程')
+        for z20 in bList:
+            print(z20)
+        print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            print(z19)
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                print('分完了片，在获取b，它的值是:')
+                print(b)
+            else:
+                print('b不是以n结尾，叠加它')
+                print('b叠加前是')
+                print(b)
+                print('b是否以[y/N]: 结尾，如果是，就发送y\n,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                print('z16的值是')
+                print(z16)
+                print('开始叠加')
+                b=b+z16
+                print('叠加后是')
+                print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('这不是最后一条命令，需要再次发送命令')
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                print(z21)
+                print('这是在while循环之下分片的结果')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+    
+def RemoterControlInvoke4ok7(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    #3.进行完2.5后，去除一次'\r'
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        #bList=b.split(d)
+        #print('这是在while之上分片处理的过程')
+        #for z20 in bList:
+        #    z20=z20.replace(f,g)
+        #    print(z20)
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            z19=z19.replace(f,g)
+                            if z19!=g:
+                                print(z19)
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                print('分完了片，在获取b，它的值是:')
+                print(b)
+            else:
+                print('b不是以n结尾，叠加它')
+                print('b叠加前是')
+                print(b)
+                print('b是否以[y/N]: 结尾，如果是，就发送y\n,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                print('z16的值是')
+                print(z16)
+                print('开始叠加')
+                b=b+z16
+                print('叠加后是')
+                print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('这不是最后一条命令，需要再次发送命令')
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                z21=z21.replace(f,g)
+                print(z21)
+                print('这是在while循环之下分片的结果')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+   
+def RemoterControlInvoke4ok8(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    #2.6.进行完2.5后，去除一次'\r'
+    #3.去除运行半截的结果
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        #bList=b.split(d)
+        #print('这是在while之上分片处理的过程')
+        #for z20 in bList:
+        #    z20=z20.replace(f,g)
+        #    print(z20)
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            z19=z19.replace(f,g)
+                            if z19!=g:
+                                print(z19)
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                #print('分完了片，在获取b，它的值是:')
+                #print(b)
+            else:
+                print('b不是以n结尾，叠加它')
+                #print('b叠加前是')
+                #print(b)
+                print('b是否以[y/N]: 结尾，如果是，就发送y\n,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                #print('z16的值是')
+                #print(z16)
+                #print('开始叠加')
+                b=b+z16
+                #print('叠加后是')
+                #print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('这不是最后一条命令，需要再次发送命令')
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                z21=z21.replace(f,g)
+                print(z21)
+                print('这是在while循环之下分片的结果')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()   
+    
+def RemoterControlInvoke4ok9(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    #2.6.进行完2.5后，去除一次'\r'
+    #3.去除运行半截的结果
+    #3.5去除打包过程中下载的半截提示。
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    z22=str.encode('##')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        #bList=b.split(d)
+        #print('这是在while之上分片处理的过程')
+        #for z20 in bList:
+        #    z20=z20.replace(f,g)
+        #    print(z20)
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            z19=z19.replace(f,g)
+                            if z19!=g:
+                                if z22 not in z19:
+                                    #如果z19中不包含##就打印这一条。这个问题存在于yum安装过程中下载软件包的位置。
+                                    #就是把下载过程屏蔽了。
+                                    print(z19)
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                #print('分完了片，在获取b，它的值是:')
+                #print(b)
+            else:
+                print('b不是以n结尾，叠加它')
+                #print('b叠加前是')
+                #print(b)
+                print('b是否以[y/N]: 结尾，如果是，就发送y\n,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                #print('z16的值是')
+                #print(z16)
+                #print('开始叠加')
+                b=b+z16
+                #print('叠加后是')
+                #print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            print('这不是最后一条命令，需要再次发送命令')
+            print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                z21=z21.replace(f,g)
+                print(z21)
+                print('这是在while循环之下分片的结果')
+            a.send(command)
+            print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()   
+    
+def RemoterControlInvoke4ok10(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    #2.6.进行完2.5后，去除一次'\r'
+    #3.去除运行半截的结果
+    #3.5去除打包过程中下载的半截提示。
+    #4.去除提示
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    z22=str.encode('##')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        #bList=b.split(d)
+        #print('这是在while之上分片处理的过程')
+        #for z20 in bList:
+        #    z20=z20.replace(f,g)
+        #    print(z20)
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            #print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                #print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            z19=z19.replace(f,g)
+                            if z19!=g:
+                                if z22 not in z19:
+                                    #如果z19中不包含##就打印这一条。这个问题存在于yum安装过程中下载软件包的位置。
+                                    #就是把下载过程屏蔽了。
+                                    print(z19)
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                #print('分完了片，在获取b，它的值是:')
+                #print(b)
+            else:
+                #print('b不是以n结尾，叠加它')
+                #print('b叠加前是')
+                #print(b)
+                #print('b是否以[y/N]: 结尾，如果是，就发送y,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                #print('z16的值是')
+                #print(z16)
+                #print('开始叠加')
+                b=b+z16
+                #print('叠加后是')
+                #print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            #print('这不是最后一条命令，需要再次发送命令')
+            #print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            #print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                z21=z21.replace(f,g)
+                print(z21)
+                #print('这是在while循环之下分片的结果')
+            a.send(command)
+            #print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+    
+def RemoterControlInvoke4ok11(host,port,userName,commands2,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    #2.6.进行完2.5后，去除一次'\r'
+    #3.去除运行半截的结果
+    #3.5去除打包过程中下载的半截提示。
+    #4.去除提示
+    #5.输出decode化
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    z22=str.encode('##')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        #bList=b.split(d)
+        #print('这是在while之上分片处理的过程')
+        #for z20 in bList:
+        #    z20=z20.replace(f,g)
+        #    print(z20)
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            #print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                #print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            z19=z19.replace(f,g)
+                            if z19!=g:
+                                if z22 not in z19:
+                                    #如果z19中不包含##就打印这一条。这个问题存在于yum安装过程中下载软件包的位置。
+                                    #就是把下载过程屏蔽了。
+                                    print(z19.decode())
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                #print('分完了片，在获取b，它的值是:')
+                #print(b)
+            else:
+                #print('b不是以n结尾，叠加它')
+                #print('b叠加前是')
+                #print(b)
+                #print('b是否以[y/N]: 结尾，如果是，就发送y,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                #print('z16的值是')
+                #print(z16)
+                #print('开始叠加')
+                b=b+z16
+                #print('叠加后是')
+                #print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            #print('这不是最后一条命令，需要再次发送命令')
+            #print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            #print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                z21=z21.replace(f,g)
+                print(z21.decode())
+                #print('这是在while循环之下分片的结果')
+            a.send(command)
+            #print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()
+    
+def RemoterControlInvoke4ok12(host,port,userName,commands,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    #2.6.进行完2.5后，去除一次'\r'
+    #3.去除运行半截的结果
+    #3.5去除打包过程中下载的半截提示。
+    #4.去除提示
+    #5.输出decode化
+    #6.收集内容，反馈给调用方。用于判断是否运行成功。
+    #6.1去除maven打包下载的过程
+    result=''
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport(('192.168.20.98',22))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(100)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n;\n'
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    z22=str.encode('##')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1,z13]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        #bList=b.split(d)
+        #print('这是在while之上分片处理的过程')
+        #for z20 in bList:
+        #    z20=z20.replace(f,g)
+        #    print(z20)
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            #print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                #print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            z19=z19.replace(f,g)
+                            if z19!=g:
+                                if z22 not in z19:
+                                    #如果z19中不包含##就打印这一条。这个问题存在于yum安装过程中下载软件包的位置。
+                                    #就是把下载过程屏蔽了。
+                                    if z15 not in z19:
+                                    #如果z19中不包含Progress ，就打印出来，这个问题存在与maven打包下载依赖的位置。
+                                    #就把这个下载过程屏蔽了。
+                                        print(z19.decode())
+                                        result+=z19.decode()
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                #print('分完了片，在获取b，它的值是:')
+                #print(b)
+            else:
+                #print('b不是以n结尾，叠加它')
+                #print('b叠加前是')
+                #print(b)
+                #print('b是否以[y/N]: 结尾，如果是，就发送y,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                z16=a.recv(10240)
+                #print('z16的值是')
+                #print(z16)
+                #print('开始叠加')
+                b=b+z16
+                #print('叠加后是')
+                #print(b)
+            n+=1
+            #time.sleep(1)
+        if m == len(commandList):
+            print('已经进行到最后一条，不再发送命令，停止for循环。')
+        else:
+            #print('这不是最后一条命令，需要再次发送命令')
+            #print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            #print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                z21=z21.replace(f,g)
+                print(z21.decode())
+                result+=z21.decode()
+                #print('这是在while循环之下分片的结果')
+            a.send(command)
+            #print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()   
+    return result
+   
+def RemoterControlInvoke4ok13(host,port,userName,commands,eventId,node):
+    #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
+    #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
+    #以下过程都只对分片结果进行处理
+    #1.去除颜色
+    #2.去掉' \r'
+    #2.5.对while外，#前面的n进行分片。while上下都处理了
+    #2.6.进行完2.5后，去除一次'\r'
+    #3.去除运行半截的结果
+    #3.5去除打包过程中下载的半截提示。
+    #4.去除提示
+    #5.输出decode化
+    #6.收集内容，反馈给调用方。用于判断是否运行成功。
+    #6.1去除maven打包下载的过程
+    #7.把print的内容写进mysql
+    result=''
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport((host,port))
+    transport.connect(username='root', pkey=private_key)
+    a=transport.open_session()
+    #此时会话已打开
+    a.settimeout(1000)
+    a.get_pty()
+    a.invoke_shell()
+    #commands='yum install httpd\n'
+    #commands='tar zvxf /rgec/src/apache-maven-3.5.3-bin.tar.gz -C /rgec/app/\n'
+
+    #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
+    commands=commands+';\n;\n'
+    #print(commands)
+    #commands='cd /tmp \n;pwd\n'
+    commandList=commands.split(';')
+    #command='ls \n'
+    c=str.encode('# ')
+    d=str.encode('\n')
+    f=str.encode('\r')
+    g=str.encode('')
+    l=str.encode(' ')
+    k=str.encode(' \r')
+    p=str.encode('\x1b')
+    s=str.encode('[[1;34m')
+    t=str.encode('[m]')
+    v=str.encode('[1m')
+    w=str.encode('[1;32m')
+    x=str.encode('[m')
+    y='[\x1b[1;33m'
+    y1=y.encode('raw_unicode_escape')
+    z=str.encode('[36m')
+    z1=str.encode('[0;32m')
+    z2=str.encode('[0;1m')
+    z7='\xe6\x80\xbb\xe7\x94\xa8\xe9\x87\x8f 12'
+    z6=z7.encode('raw_unicode_escape')
+    z11=str.encode('[0;36m')
+    z9=str.encode(' KB')
+    z13=str.encode('  ')
+    z15=str.encode('Progress ')
+    z17=str.encode('[y/N]: ')
+    z18=str.encode('[[1;33m')
+    z22=str.encode('##')
+    z23=str.encode('[1;34m')
+    z24=str.encode('[m] [1m')
+    z25=str.encode('[m')
+    z26=str.encode('[00;32m')
+    z27=str.encode('[00m')
+    z28=str.encode('(yes/no)? ')
+    z29=str.encode('正在检出文件')
+    
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1,z13,z23,z24,z25,z26,z27]
+    doingList=[z22,z15,z29]
+    m=1
+    b=a.recv(10240)
+    for command in commandList:
+        #print(b)这里必须给b分片，虽然第一条命令不会有其他片，但是，最后那一次是以#号结尾的，它进不了while里面进行处理。所以要在这里给他分片。
+        #第一条命令的开头不会受到影响，只会影响到最后1条。
+        #bList=b.split(d)
+        #print('这是在while之上分片处理的过程')
+        #for z20 in bList:
+        #    z20=z20.replace(f,g)
+        #    print(z20)
+        #print('发送第'+str(m)+'次命令前获取b的值，同上，开始循环获取消息,直到，获得得到#空格结尾，才可以输入第'+str(m)+'条命令')
+        n=1
+        while not b.endswith(c):
+            #print('如果b是以n结尾的，那么就可以分片了。分完了片，在获取b，在判断它是不是以#空格结尾。')
+            if b.endswith(d):
+                #print('b是以n结尾的，开始分片')
+                for i in b.split(d):
+                    #如果i等于空，就不输出
+                    if i !=g:
+                        for u in needReplaceList:
+                            i=i.replace(u,g)
+                        i=i.replace(k,g)
+                        iList=i.split(f)
+                        for z19 in iList:
+                            z19=z19.replace(f,g)
+                            if z19!=g:
+                                if z22 not in z19:
+                                    #如果z19中不包含##就打印这一条。这个问题存在于yum安装过程中下载软件包的位置。
+                                    #就是把下载过程屏蔽了。
+                                    if z15 not in z19:
+                                    #如果z19中不包含Progress ，就打印出来，这个问题存在与maven打包下载依赖的位置。
+                                    #就把这个下载过程屏蔽了。
+                                    #z29，不包含'正在检出文件',就打印，这个问题存在于git拉取文件过程中
+                                        if z29 not in z19:
+                                            #print(z19)
+                                            DeployLog(z19.decode(),eventId,node)
+                                            result+=z19.decode()
+                        #print(i) 输出z19，就不用输出i了。
+                b=a.recv(10240)
+                #print('分完了片，在获取b，它的值是:')
+                #print(b)
+            else:
+                #print('b不是以n结尾，叠加它')
+                #print('b叠加前是')
+                #print(b)
+                #print('b是否以[y/N]: 结尾，如果是，就发送y,然后在获取结果。如果不是，那就继续获取b')
+                if b.endswith(z17):
+                    a.send('y\n')
+                if b.endswith(z28):
+                    a.send('yes\n')
+                z16=a.recv(10240)
+                #print('z16的值是')
+                #print(z16)
+                #print('开始叠加')
+                b=b+z16
+                #print('叠加后是')
+                #print(b)
+            n+=1
+            #print(n)
+            #time.sleep(1)
+        if m == len(commandList):
+            #print('已经进行到最后一条，不再发送命令，停止for循环。')
+            DeployLog('已经进行到最后一条，不再发送命令，停止for循环。',eventId,node)
+        else:
+            #print('这不是最后一条命令，需要再次发送命令')
+            #print('b的值现在是#空格结尾了，结束while循环，输入命令')
+            #print('虽然b是以#空格结尾，但是我不保证#号前面没有n，所以，我要分片处理b')
+            bList=b.split(d)
+            for z21 in bList:
+                z21=z21.replace(f,g)
+                #print(z21.decode())
+                DeployLog(z21.decode(),eventId,node)
+                result+=z21.decode()
+                #print('这是在while循环之下分片的结果')
+            a.send(command)
+            #print('第'+str(m)+'条命令发送完成，开始接收数据，理论上会是命令结尾')
+            b=a.recv(10240)
+        #如果不是最后一条命令，那么b的结果处理过程是在上面进行的。
+        #如果是最后一条命令，那么b的结果处理过程是在下面进行的。
+        #为什么呢？
+        #因为上面的过程是
+        #1.判断结果是否是#空格结尾
+        #    不是，判断是否是n结尾
+        #        是，分片;重新获取新b
+        #        不是，叠加获取新b
+        #    是，结束循环
+        #2.发送命令，获取结果，进入下一次for循环，在下一次for循环中处理b的结果
+        #可以这样吗，判断时候命令是最后一个命令，然后，
+        #如果是最后一条命令，就在处理完b的结果，就结束for循环
+        m+=1
+        
+    
+   #print('结束for 循环')
+    
+    a.close()
+    transport.close()   
+    return result
+   
 def RemoteFileExist(host,port,userName,path):
     import paramiko,time,sys
     private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
@@ -1238,7 +3001,6 @@ def RemoteFileExist(host,port,userName,path):
         result="not exist"
     return(result)
     
-
 def addRemoteUser(userName,host,sshPort,sshName,eventId,node):
     command="grep "+userName+" /etc/passwd"
     result=RemoteControl(host,sshPort,sshName,command,eventId,node)
@@ -1268,28 +3030,32 @@ def addRemoteGroup(groupName,host,sshPort,sshName,eventId,node):
             log=host+" : "+'false'
             DeployLog(log,eventId,node)
             return log
-
-        
+     
 def Upload(host,sshPort,sshName,oldFileName,newFileName,eventId,node):
-    log=host+" : "+'开始上传: '+newFileName
-    DeployLog(log,eventId,node)
-    import paramiko,time,sys
-    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
-    transport = paramiko.Transport((host,sshPort))
-    transport.connect(username=sshName, pkey=private_key)
-    sftp = paramiko.SFTPClient.from_transport(transport)
-    sftp.put(oldFileName,newFileName)
-    transport.close()
     exist=RemoteFileExist(host,sshPort,sshName,newFileName)
-    if exist =='exist':
-        log=host+" : "+('成功：上传完成 ,路径：'+newFileName)
+    if exist !='exist':
+        log=host+" : "+'不存在路径：'+newFileName+',开始上传'
         DeployLog(log,eventId,node)
+        import paramiko,time,sys
+        private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+        transport = paramiko.Transport((host,sshPort))
+        transport.connect(username=sshName, pkey=private_key)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        sftp.put(oldFileName,newFileName)
+        transport.close()
+        exist=RemoteFileExist(host,sshPort,sshName,newFileName)
+        if exist =='exist':
+            log=host+" : "+('成功：上传完成 ,路径：'+newFileName)
+            DeployLog(log,eventId,node)
+        else:
+            log=host+" : "+('失败：上传失败 ,路径：'+newFileName)
+            DeployLog(log,eventId,node)
+            log=host+" : "+'false'
+            DeployLog(log,eventId,node)
+            return log
     else:
-        log=host+" : "+('失败：上传失败 ,路径：'+newFileName)
+        log=host+" : "+'存在路径：'+newFileName+'不需要上传'
         DeployLog(log,eventId,node)
-        log=host+" : "+'false'
-        DeployLog(log,eventId,node)
-        return log
 
 def Rm(host,sshPort,sshName,path,eventId,node):
     log=host+" : "+'删除: '+path
@@ -1306,8 +3072,7 @@ def Rm(host,sshPort,sshName,path,eventId,node):
     else:
         log=host+" : "+('成功：删除 ,路径：'+path)
         DeployLog(log,eventId,node)
-
-        
+     
 '''
 def CheckUploadAndContinu(host,sshPort,sshName,path,eventId,node):
     exist=RemoteFileExist(host,sshPort,sshName,path)
@@ -1324,8 +3089,8 @@ def CheckUploadAndContinu(host,sshPort,sshName,path,eventId,node):
 def StartApp(appName,appPort,host,sshPort,sshName,eventId,node,company):
     log=host+" : "+appName+'执行启动'
     DeployLog(log,eventId,node)
-    command=('su - '+company+' -c "/etc/init.d/'+appName+' start"')
-    #command="/etc/init.d/"+appName+" start"
+    #command=('su - '+company+' -c "/etc/init.d/'+appName+' start"')
+    command="/etc/init.d/"+appName+" start"
     RemoteControl(host,sshPort,sshName,command,eventId,node)
     time.sleep(10)
     command="netstat -tupln |grep "+str(appPort)+"|awk -F ' |:' '{print $19}'"
@@ -1361,9 +3126,7 @@ def CheckPathAndAdd(host,sshPort,sshName,path,eventId,node):
             log=host+" : "+'false'
             DeployLog(log,eventId,node)
             return log
-
-
-        
+ 
 def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,eventId,node,tomcatVersion,company,javaVersion,appName):
     softSrcPath='/'+company+'/src'
     tomcatSrcPath=softSrcPath+'/apache-tomcat-'+tomcatVersion+'.tar.gz'
@@ -1400,6 +3163,8 @@ def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,eventId,node,tomca
     Sed(str(8005),str(tomcatShutdownPort),appPath+"/conf/server.xml",host,sshPort,sshName,eventId,node)
     appAccessLogDir='/'+company+"/log/autodeploy/tomcat/"+appName+"/access"
     Sed('logs',appAccessLogDir,appPath+"/conf/server.xml",host,sshPort,sshName,eventId,node)
+    #Sed('webapps','webapps/Root',appPath+"/conf/server.xml",host,sshPort,sshName,eventId,node)
+    
     CheckPathAndAdd(host,sshPort,sshName,appAccessLogDir,eventId,node)
     appCoreLogDir='/'+company+"/log/autodeploy/tomcat/"+appName+"/core"
     Sed('\${catalina.base}/logs',appCoreLogDir,appPath+"/conf/logging.properties",host,sshPort,sshName,eventId,node)
@@ -1445,10 +3210,10 @@ def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,eventId,node,tomca
     #检测java是否存在
     exist=RemoteFileExist(host,sshPort,sshName,javaHome)
     if exist == 'exist':
-        log=host+" : "+(javaHome+'存在')
+        log=host+" : "+javaHome+'存在'
         DeployLog(log,eventId,node)
     else:
-        log=host+" : "+(javaHome+'不存在')
+        log=host+" : "+javaHome+'不存在'
         DeployLog(log,eventId,node)
         javaSoftSrcPath=softSrcPath+'/'+javaVersion+'.tar.gz'
         Upload(host,sshPort,sshName,javaSoftSrcPath,javaSoftSrcPath,eventId,node)
@@ -1457,7 +3222,6 @@ def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,eventId,node,tomca
     StartApp(appName,tomcatHttpPort,host,sshPort,sshName,eventId,node,company)
     #sftp.get('/filedir/oldtext.txt', r'C:\Users\duany_000\Desktop\oldtext.txt')
 
-
 def DeployLog(log,eventId,node):
     new=DeployLogTable()
     new.log=log
@@ -1465,6 +3229,275 @@ def DeployLog(log,eventId,node):
     new.node=node
     new.save()
 
+def GetSshPort(host,company):
+    companyObject=CompanyTable.objects.get(name=company)
+    serverRooms=ServerRoomTable.objects.filter(company=companyObject)
+    cabinets=[]
+    for  serverRoom in serverRooms:
+        a=CabinetTable.objects.filter(serverRoom=serverRoom)
+        for i in a:
+            cabinets.append(i)
+    equipments=[]
+    for cabinet in cabinets:
+        a=EquipmentTable.objects.filter(cabinet = cabinet)
+        for equipment in a:
+            equipments.append(equipment)
+    equipment=''
+    for equipment in equipments:
+        if equipment.ipAddress==host:
+            hostObject=equipment
+    sshPort=int(hostObject.controlPort)
+    return sshPort
+    
+def PullGit(deployHost,company,gitPath,branch,eventId,appName,node,mavenCodePath,gitCloneDir):
+    #gitCloneDir='/'+company+'/var/autodeploy/'+appName+'/'+eventId+'/git_clone/'
+    log=deployHost+" : 创建目录,git克隆目录: "+gitCloneDir
+    DeployLog(log,eventId,node)
+    sshPort=GetSshPort(deployHost,company)
+    sshName='root'
+    CheckPathAndAdd(deployHost,sshPort,sshName,gitCloneDir,eventId,node)
+    command='cd '+gitCloneDir+';git clone '+gitPath
+    result=RemoteControl(deployHost,sshPort,sshName,command,eventId,node)
+    command='cd '+gitCloneDir+'/'+mavenCodePath+';git checkout '+branch
+    result=RemoteControl(deployHost,sshPort,sshName,command,eventId,node)
+    for i in result:
+        if 'error' in i:
+            log=deployHost+' : false'
+            DeployLog(log,eventId,node)
+            return log
+    return result
+
+def CheckCommonTools(host,sshPort,sshName,fullPath,oldFileName,newFileName,targetPath,targetChildPath,eventId,node):
+    #检查远程文件名是否存在，没有就上传，解压缩。
+    result=RemoteFileExist(host,sshPort,sshName,fullPath)
+    if 'not' in result:
+        log=host+" : "+fullPath+'不存在，需要上传'
+        DeployLog(log,eventId,node)
+        
+        Upload(host,sshPort,sshName,oldFileName,newFileName,eventId,node)
+        
+        log=host+" : "+newFileName+'已到位，下一步开始解压'
+        DeployLog(log,eventId,node)
+        result=Unzip(newFileName,targetPath,targetChildPath,host,sshPort,sshName,eventId,node)
+        if result == 'done':
+            #判断远程服务器上的PATH中是否有targetPath，如果有就不插入了
+                command=("grep -n "+targetPath+' /etc/profile')
+                result=RemoteControl(host,sshPort,sshName,command,eventId,node)
+                if len(result)==0:
+                    log=host+" : "+'未找到: '+src+' /etc/profile '
+                    DeployLog(log,eventId,node)
+                    command='echo export PATH='+targetPath+targetChildPath+'/bin:\$PATH >> /etc/profile;. /etc/profile'
+                    RemoteControl(host,sshPort,sshName,command,eventId,node)
+                    result='done'
+                else:
+                    log='环境变量中已经有这个工具的位置了，不需要再插入 /etc/profile'
+                    DeployLog(log,eventId,node)
+                    result='done'
+    return result
+        
+def PackageMaven(eventId,appName,company,host,node,mavenCodePath,packagePro,gitCloneDir):
+    
+    #1.生成maven临时本地仓库
+    #2.填写临时maven配置文件
+    #3.开始打包
+    srcSettingFilePath='/'+company+'/src/mavenSetting.xml'
+    #rootDIR='/'+company+'/var/autodeploy/'+appName+'/'+eventId+'/'
+    rootDIR=gitCloneDir.replace('/git-clone','')
+    settingFilePath=rootDIR+'settings.xml'
+    sshPort=GetSshPort(host,company)
+    sshName='root'
+    Upload(host,sshPort,sshName,srcSettingFilePath,settingFilePath,eventId,node)
+    manager='ggc'
+    mavenLocalrepoDir=rootDIR+'mavenLocalrepoDir'
+    mavenServerUserId='nexus-snapshots'
+    mavenServerUserName='admin'
+    mavenServerUserPassword='YLRoyP(-0rQPvpwSPIk{47056UIcWvms'
+    mavenRepUrl='http://mvn.rograndec.net/nexus/content/groups/public/'
+    mavenComplieJdk='8'
+    replaceList=['manager','mavenLocalrepoDir','mavenServerUserId','mavenServerUserName','mavenServerUserPassword','mavenRepUrl','mavenComplieJdk']
+    for i in replaceList:
+        Sed(i,locals()[i],settingFilePath,host,sshPort,sshName,eventId,node)
+    #packagePro=' clean package -P dev_wh'
+    mavenPackageLog=rootDIR+'mavenPackage.log'
+    commands='cd '+gitCloneDir+mavenCodePath+'\n;mvn -s '+settingFilePath+packagePro+'\n;/bin/ls -l\n'
+    #用交互式方式开始打包，先好检测是否有maven软件，检测上传部署maven的过程应该是个函数
+    #mvn -s /rgec/var/autodeploy/dev-wh-mph-gppayservice/20180607_471718/maven_setting/settings.xml clean deploy -P dev_wh -Dmaven.test.skip=true
+    #打包前，判断打包服务器是否有maven，如果没有就自动部署
+    oldFileName='/'+company+'/src/'+'apache-maven-3.5.3-bin.tar.gz'
+    newFileName=oldFileName
+    targetPath='/'+company+'/app/'
+    targetChildPath='apache-maven-3.5.3'
+    fullPath=targetPath+targetChildPath+'/bin/mvn'
+    result=CheckCommonTools(host,sshPort,sshName,fullPath,oldFileName,newFileName,targetPath,targetChildPath,eventId,node)
+    if result != 'done':
+        if result != 'exist':
+            return 'false'
+    log=host+" : "+'开始打包'
+    DeployLog(log,eventId,node)
+    #print('pppppppppppppp')
+    result=RemoterControlInvoke4ok13(host,sshPort,sshName,commands,eventId,node)
+    if 'BUILD SUCCESS' in result:
+        log='BUILD SUCCESS'
+        DeployLog(log,eventId,node)
+        return log
+    else:
+        log='false'
+        DeployLog(log,eventId,node)
+        return log
+    #print('llllllllllll')
+
+def DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,appTargetPackagePath,appUnzipPackageDir,appServicePath,eventId,node):
+    #把软件包传上去
+    #停止服务
+    #删除老文件目录
+    #创建新文件目录
+    #把软件包解压缩进去
+    #删除软件包
+    #强制链接到服务webapps目录下
+    #启动服务
+    #如果有检测端口是否存在
+    #如果有检测心跳页面是否存在
+    #完
+    deployHostSshPort=GetSshPort(deployHost,company)
+    serviceSshPort=GetSshPort(serviceHost,company)
+    appDataPath='/'+company+'/data/autodeploy/tomcat-webapps/'+appName
+    #print(appDataPath)
+    CheckPathAndAdd(serviceHost,serviceSshPort,'root',appDataPath,eventId,node)
+    commands='scp -P '+str(serviceSshPort)+' '+appSrcPackagePath+' '+'root'+'@'+serviceHost+':'+appDataPath+'\n'
+    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    commands='/etc/init.d/'+appName+' stop\n'
+    commands=commands+';rm -fr '+appDataPath+'/'+'Root\n'
+    #commands=commands+';mkdir -p '+appDataPath+'\n'
+    #这次解压缩的结果是一个目录
+    commands=commands+';unzip '+appTargetPackagePath+' -d '+appDataPath+'/'+appUnzipPackageDir+'\n'
+    appDataFullPath=appDataPath+'/'+appUnzipPackageDir
+    commands=commands+';ln -sf '+appDataFullPath+' '+appServicePath+'/webapps/'+appUnzipPackageDir+'\n'
+    commands=commands+';/etc/init.d/'+appName+' start\n'
+    #print(commands)
+    result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,eventId,node)
+    #print(result)
+    
+def DeployForSpringBoot(serviceHost,eventId,node,deployHost,company):
+    #def DeployForSpringBoot(serviceHost,eventId,node,deployHost,company):
+    #1.上传
+    #2.停止原服务
+    #3.删除原包
+    #4.部署服务：软件包，启动文件，日志目录
+    #5.启动服务
+    enviroment=node.enviroment
+    serverRoom=node.serverRoom
+    project=node.project
+    service=node.service
+    
+    serviceName=enviroment.name+'-'+serverRoom.name+'-'+project.name+'-'+service.name
+    servicePackagePath='/'+company+'/var/autodeploy/'+serviceName+'/'+eventId+'/git-clone/'+service.targetFilePath
+    serviceHome='/'+company+'/data/autodeploy/springBoot/'+serviceName+'/'
+    serviceUploadPackagePath=serviceHome+serviceName+'.jar'
+    deployHostSshPort=GetSshPort(deployHost,company)
+    serviceSshPort=GetSshPort(serviceHost,company)
+    CheckPathAndAdd(serviceHost,serviceSshPort,'root',serviceHome,eventId,node)
+    #创建serviceHome
+    #停止服务
+    serviceInitFile='/etc/init.d/'+serviceName
+    commands=serviceInitFile+' stop\n'
+    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    #上传软件包,原来存在的话，覆盖
+    commands='scp -P '+str(serviceSshPort)+' '+servicePackagePath+' '+'root'+'@'+serviceHost+':'+serviceUploadPackagePath+'\n'
+    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    
+    sprintBootCommonInitFile='/'+company+'/src/sprintBootCommonInitFile.sh'
+    serviceJavaHome='/'+company+'/app/java/'+service.javaVersion
+    serviceMemory=node.memory
+    serviceStartProfile=node.springBootStartProfile
+    serviceLogHome='/'+company+'/log/autodeploy/java/'+serviceName
+    needReplaceList=['serviceName','serviceJavaHome','serviceMemory','serviceStartProfile','serviceLogHome','serviceHome']
+    #上传init文件
+    commands='scp -P '+str(serviceSshPort)+' '+sprintBootCommonInitFile+' '+'root'+'@'+serviceHost+':'+'/etc/init.d/'+serviceName+'\n'
+    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    #循环替换文中内容
+    for i  in needReplaceList:
+        Sed(i,locals()[i],serviceInitFile,serviceHost,serviceSshPort,'root',eventId,node)
+    #创建日志目录
+    CheckPathAndAdd(serviceHost,serviceSshPort,'root',serviceLogHome,eventId,node)
+    #复权
+    command="chmod +x /etc/init.d/"+serviceName
+    result=RemoteControl(serviceHost,serviceSshPort,'root',command,eventId,node)
+    command='chown -R '+company+'.'+company+' '+serviceLogHome
+    result=RemoteControl(serviceHost,serviceSshPort,'root',command,eventId,node)
+    #启动服务
+    servicePort=((node.portList).split(','))[0]
+    StartApp(serviceName,servicePort,serviceHost,serviceSshPort,'root',eventId,node,company)
+    
+def DeployForDubbo(serviceHost,eventId,node,deployHost,company):
+    #1.上传
+    #2.停止原服务
+    #3.删除原包
+    #4.部署服务：软件包，启动文件，日志目录
+    #5.启动服务
+    #servicePackagePath='/rgec/var/autodeploy/test-gm-mph-cmsservice/20180705090439964/git-clone/mph-cms-service-group/mph-cms-impl/target/mph-dubbo-deploy.tar.gz'
+    #serviceUploadPackagePath='/rgec/data/autodeploy/dubbo/test-gm-mph-cmsservice'
+    
+    enviroment=node.enviroment
+    serverRoom=node.serverRoom
+    project=node.project
+    service=node.service
+    
+    serviceName=enviroment.name+'-'+serverRoom.name+'-'+project.name+'-'+service.name
+    servicePackagePath='/'+company+'/var/autodeploy/'+serviceName+'/'+eventId+'/git-clone/'+service.targetFilePath
+    serviceHome='/'+company+'/data/autodeploy/dubbo/'+serviceName+'/'
+    serviceUploadPackagePath=serviceHome+serviceName+'.tar.gz'
+    deployHostSshPort=GetSshPort(deployHost,company)
+    serviceSshPort=GetSshPort(serviceHost,company)
+    CheckPathAndAdd(serviceHost,serviceSshPort,'root',serviceHome,eventId,node)
+    #创建serviceHome
+    #停止服务
+    serviceInitFile='/etc/init.d/'+serviceName
+    commands=serviceInitFile+' stop\n'
+    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    #上传软件包,原来存在的话，覆盖
+    commands='scp -P '+str(serviceSshPort)+' '+servicePackagePath+' '+'root'+'@'+serviceHost+':'+serviceUploadPackagePath+'\n'
+    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    #起个什么名字好呢？
+    #它是dubbo打包时候的目录名
+    serviceTarDir=(((service.targetFilePath).split('/'))[-1]).replace('.tar.gz','')
+    #它是dubbo包解压缩后的路径，dubbo init文件用的就是这个路径做serviceHome。
+    serviceWorkDir=serviceHome+serviceTarDir
+    #删除老目录
+    commands='rm -rf '+serviceWorkDir+'\n'
+    #解压缩。
+    commands+='cd '+serviceHome+'\n;tar zxvf '+serviceUploadPackagePath+'\n'
+    #删除原包
+    commands+='rm -f '+serviceUploadPackagePath+'\n'
+    result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,eventId,node)
+    sprintBootCommonInitFile='/'+company+'/src/dubboCommonInitFile.sh'
+    serviceJavaHome='/'+company+'/app/java/'+service.javaVersion
+    #serviceMemory=node.memory
+    #serviceStartProfile=node.springBootStartProfile
+    serviceLogHome='/'+company+'/log/autodeploy/java/'+serviceName
+    serviceUser=company
+
+    serviceStartScript='/bin/start.sh'
+    serviceStopScript='/bin/stop.sh'
+    needReplaceList=['serviceName','serviceJavaHome','serviceLogHome','serviceWorkDir','serviceUser','serviceStartScript']
+    #上传init文件
+    commands='scp -P '+str(serviceSshPort)+' '+sprintBootCommonInitFile+' '+'root'+'@'+serviceHost+':'+'/etc/init.d/'+serviceName+'\n'
+    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    #循环替换文中内容
+    for i  in needReplaceList:
+        Sed(i,locals()[i],serviceInitFile,serviceHost,serviceSshPort,'root',eventId,node)
+    #创建日志目录
+    CheckPathAndAdd(serviceHost,serviceSshPort,'root',serviceLogHome,eventId,node)
+    #复权
+    command="chmod +x /etc/init.d/"+serviceName
+    result=RemoteControl(serviceHost,serviceSshPort,'root',command,eventId,node)
+    command='chown -R '+company+'.'+company+' '+serviceLogHome
+    result=RemoteControl(serviceHost,serviceSshPort,'root',command,eventId,node)
+    #启动服务
+    servicePort=((node.portList).split(','))[0]
+    StartApp(serviceName,servicePort,serviceHost,serviceSshPort,'root',eventId,node,company)
+    
+    
+    
 def Do(request):
     companyName='rgec'
     #这里以后会采集用户信息，来判断他的公司名称。目前就先写死。
@@ -1472,6 +3505,7 @@ def Do(request):
     if request.method == 'POST':
         eventId=request.POST.get('eventId',None)
         nodeId = request.POST.get('nodeId',None)
+        nodeBranch = request.POST.get('nodeBranch',None)
         if nodeId != '':
             nodeObject=NodeTable.objects.get(id=nodeId)
             enviroment=nodeObject.enviroment.name
@@ -1484,6 +3518,7 @@ def Do(request):
             portList=(nodeObject.portList.split(','))
             appName=enviroment+'-'+serverRoom+'-'+project+'-'+service
             company=nodeObject.project.company.name
+            appPath=''
             if serviceType=='tomcat':
                 tomcatVersion=nodeObject.service.serviceType.version 
                 javaVersion=nodeObject.service.javaVersion
@@ -1494,12 +3529,64 @@ def Do(request):
                     DeployLog(log,eventId,nodeObject)
                     result=InstallTomcat(host,'root',int(controlPort),portList,appPath,eventId,nodeObject,tomcatVersion,company,javaVersion,appName)
                     if result == 'false':
-                        return HttpResponse('构建失败')
-                log=host+" : "+(appPath+'目录已存在，此时，该开始打包')
-                DeployLog(log,eventId,nodeObject)
-                log=host+" : "+('done')
-                DeployLog(log,eventId,nodeObject)
-                return HttpResponse('done')
+                        return HttpResponse('搭建tomcat失败')
+            log=appPath+'目录已存在，此时，该开始拉代码了'
+            DeployLog(log,eventId,nodeObject)
+            serverRoomObject=nodeObject.serverRoom
+            deployHost=(DeployHostTable.objects.get(serverRoom=serverRoomObject)).host.ipAddress
+            projectObject=ProjectTable.objects.get(name=project)
+            serviceObject=ServiceTable.objects.get(name=service,project=projectObject)
+            gitPath=serviceObject.codeSrc
+            
+            mavenCodePath=serviceObject.mavenCodePath
+            packagePro=serviceObject.mavenParameter
+            #print(serviceObject.id)
+            #print(packagePro)
+            #mavenParameter=enviroment+'_'+serverRoom
+            packagePro='   '+serviceObject.mavenParameter+' '+enviroment+'_'+serverRoom
+            gitCloneDir='/'+company+'/var/autodeploy/'+appName+'/'+eventId+'/git-clone/'
+            result=PullGit(deployHost,company,gitPath,nodeBranch,eventId,appName,nodeObject,mavenCodePath,gitCloneDir)
+            if 'false' in result:
+                return HttpResponse(result)
+            log='拉完代码了，开始打包'
+            DeployLog(log,eventId,nodeObject)
+            javaVersion=nodeObject.service.javaVersion
+            if javaVersion != None:
+                result=PackageMaven(eventId,appName,company,deployHost,nodeObject,mavenCodePath,packagePro,gitCloneDir)
+                if result == 'false':
+                    return HttpResponse(result)
+            serviceHost=host
+            #服务部署的服务器地址:192.168.20.99
+            appSrcPackagePath=gitCloneDir+nodeObject.service.targetFilePath
+            #服务打完包的路径:/rgec/var/autodeploy/dev-gm-mph-www/20180702082446848/git-clone/d.mypharma.com/target/ROOT.war
+            mavenTargetFile=((nodeObject.service.targetFilePath).split('/'))[-1]
+            #服务打包后的文件名:ROOT.war
+            if serviceType=='tomcat':
+                appTargetPackagePath='/'+company+'/data/autodeploy/tomcat-webapps/'+appName+'/'+mavenTargetFile
+                #print(appTargetPackagePath)
+                #上传后的服务文件名:/rgec/data/autodeploy/tomcat-webapps/dev-gm-mph-www/ROOT.war
+                appServicePath=appPath
+                appUnzipPackageDir=mavenTargetFile.replace('.war','')
+                #服务解压缩后的相对目录。:ROOT
+                result=DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,appTargetPackagePath,appUnzipPackageDir,appServicePath,eventId,nodeObject)
+                '''
+                #deployHost:192.168.20.98
+                #serviceHost:192.168.20.99
+                #company:rgec
+                #appName:dev-gm-mph-www
+                #appSrcPackagePath:/rgec/var/autodeploy/dev-gm-mph-www/20180702082446848/git-clone/d.mypharma.com/target/ROOT.war
+                #appTargetPackagePath:/rgec/data/autodeploy/tomcat-webapps/dev-gm-mph-www/ROOT.war
+                #appUnzipPackageDir:ROOT
+                #appServicePath:/rgec/app/autodepoly/tomcat/dev-gm-mph-www-tomcat-7.0.59
+                '''
+            if serviceType=='sprintBoot':
+                DeployForSpringBoot(serviceHost,eventId,nodeObject,deployHost,company)
+            if serviceType=='dubbo':
+                DeployForDubbo(serviceHost,eventId,nodeObject,deployHost,company)
+                
+            log='ok done'
+            DeployLog(log,eventId,nodeObject)
+            return HttpResponse('done')
         else:
             result='请先提交，然后在执行'
             return HttpResponse(result)
@@ -1525,13 +3612,47 @@ def ViewDeployLog_eventId(request,id):
         logIdObjects=DeployLogTable.objects.filter(eventId=id)
         for i in logIdObjects:
             log=i.log
-            logs.append(log+'@')
+            logs.append(log+'@@')
     return HttpResponse(logs)
+'''
+def SelectService(request):
+    if request.method=='POST':
+        projectName=request.POST.get('projectName',None)
+        projectObject=ProjectTable.objects.get(name=projectName)
+        serviceObjects=ServiceTable.objects.filter(project=projectObject)
+        services=''
+        n=1
+        for i in serviceObjects:
+            if n != len(serviceObjects):
+                services+=(i.name+'@@')
+            else:
+                services+=i.name
+            n+=1
+    return HttpResponse(services)
+'''
+def GetRange(request):
+    if request.method=='POST':
+        AName=request.POST.get('AName',None)
+        ATable=request.POST.get('ATable',None)
+        BTable=request.POST.get('BTable',None)
+        BColmn=request.POST.get('BColmn',None)
+        ATable=eval(ATable)
+        AObject=ATable.objects.get(name=AName)
+        param={BColmn:AObject}
+        BTableObject=eval(BTable)
+        BObjects=BTableObject.objects.filter(**param)
+        result=''
+        n=1
+        for i in BObjects:
+            if n != len(BObjects):
+                result+=(i.name+'@@')
+            else:
+                result+=i.name
+            n+=1
+    return HttpResponse(result)
 
-
-
-
-
+def Help(request):
+    return HttpResponse('ok')
 
 
 

@@ -76,6 +76,13 @@ class EquipmentTable ( models.Model ) :
     def __unicode__(self):
         return self.name
 
+class DeployHostTable ( models.Model ) :
+    id = models.AutoField('ID',primary_key=True)
+    serverRoom=models.ForeignKey(ServerRoomTable,null=True,blank=True,on_delete=models.CASCADE)
+    host=models.ForeignKey(EquipmentTable,null=True,blank=True,on_delete=models.CASCADE)
+    def __unicode__(self):
+        return self.host.ipAddress
+
 class OccupationTable ( models.Model ) :
     id = models.AutoField('ID',primary_key=True)
     name = models.CharField(max_length=50,null=True)
@@ -129,6 +136,10 @@ class ServiceTable ( models.Model ) :
     operationEngineer= models.ForeignKey(PrivateTable,null=True, blank=True,on_delete=models.CASCADE,related_name = "operationEngineer")
     serviceType= models.ForeignKey(ServiceTypeTable,null=True, blank=True,on_delete=models.CASCADE)
     javaVersion = models.CharField(max_length=50,null=True)
+    codeSrc = models.CharField(max_length=500,null=True)
+    mavenCodePath = models.CharField(max_length=500,null=True)
+    targetFilePath = models.CharField(max_length=500,null=True)
+    mavenParameter = models.CharField(max_length=500,null=True)
     def __unicode__(self):
         return self.name
         
@@ -153,6 +164,9 @@ class NodeTable ( models.Model ) :
     ctime= models.CharField(max_length=49,null=True,default=localtime)    
     portList= models.CharField(max_length=500,null=True)
     logPathList= models.CharField(max_length=500,null=True)
+    branch=models.CharField(max_length=50,null=True)
+    springBootStartProfile = models.CharField(max_length=500,null=True)
+    memory = models.CharField(max_length=500,null=True)
     def __unicode__(self):
         return self.name
 

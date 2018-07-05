@@ -72,6 +72,10 @@
                         </select>\
                     </td>\
                     <td id="javaVersion"><input type="text"></td>\
+                    <td id="codeSrc"><input type="text"></td>\
+                    <td id="mavenCodePath"><input type="text"></td>\
+                    <td id="targetFilePath"><input type="text"></td>\
+                    <td id="mavenParameter"><input type="text"></td>\
                     <td id="serviceCime"><input type="text"placeholder="autoAdd"></td>\
                 </tr>\
                 ';
@@ -83,7 +87,7 @@
         
             $("input:checked").each(function(i){
 
-                var Array=range(1,10);
+                var Array=range(1,14);
                 //全局变量的声明如果重复会报错 Array.isArray is not a function
                 for (N in Array){
                     tdN='td'+N;
@@ -124,6 +128,19 @@
                         case 9:
                             javaVersion_value=tdN_value;;
                             break;
+                        case 10:
+                            codeSrc_value=tdN_value;;
+                            break;
+                        case 11:
+                            mavenCodePath_value=tdN_value;;
+                            break;
+                        case 12:
+                            targetFilePath_value=tdN_value;;
+                            break;
+                        case 13:
+                            mavenParameter_value=tdN_value;;
+                            break;
+
                         default:
                             alert('no '+ N);
                     }
@@ -147,6 +164,11 @@
                         serviceOperationEngineer:operationEngineer_value,
                         serviceServiceType:serviceType_value,
                         serviceJavaVersion:javaVersion_value,
+                        serviceCodeSrc:codeSrc_value,
+                        serviceMavenCodePath:mavenCodePath_value,
+                        serviceTargetFilePath:targetFilePath_value,
+                        serviceMavenParameter:mavenParameter_value,
+
                     },
                     success:function(response,status,xhr){
                         alert(response);
@@ -226,6 +248,10 @@
             <th>operationEngineer</th>
             <th>serviceType</th>
             <th>javaVersion</th>
+            <th>codeSrc</th>
+            <th>mavenCodePath</th>
+            <th>targetFilePath</th>
+            <th>mavenParameter</th>
             <th>ctime</th>
         </tr>
         {% for service in services %}
@@ -292,7 +318,7 @@
                 <select>
                     {% for serviceType in serviceTypes %}
                         <option value="{{ serviceType.name }}" 
-                        {% if private.name == service.serviceType.name %}
+                        {% if serviceType.name == service.serviceType.name %}
                             selected="selected"
                         {% endif %}
                         >{{ serviceType.name }}</option>
@@ -300,6 +326,10 @@
                 </select>
             </td>
             <td>{{ service.javaVersion }}</td>
+            <td>{{ service.codeSrc }}</td>
+            <td>{{ service.mavenCodePath }}</td>
+            <td>{{ service.targetFilePath }}</td>
+            <td>{{ service.mavenParameter }}</td>
             <td>{{ service.ctime }}</td>
         </tr>
         {% endfor %}

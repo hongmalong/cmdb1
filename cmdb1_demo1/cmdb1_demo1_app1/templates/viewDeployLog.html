@@ -151,7 +151,7 @@
                     success:function(response,status,xhr){
                         //获得log内容
                         $('#logs').empty();
-                        responseArray=response.split('@');
+                        responseArray=response.split('@@');
                         responseArray.splice(responseArray.length-1,1);
                         for (i=1;i<=responseArray.length;i++){
                             $('#logs').append("<tr  ><td style='border:1px solid' class ='b'>"+(i)+"</td><td style='border:1px solid'>"+responseArray[i-1]+"</td></tr>");

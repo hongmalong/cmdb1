@@ -25,7 +25,7 @@ SECRET_KEY = '_n&2)jl+025f*@%e@cpdp7$f%ebm7j8f#jt06sg#m#vj2xdzu2'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [ 'cmdb.ggc.com' ,'192.168.20.98']
+ALLOWED_HOSTS = [ 'cmdb.ggc.com' ,'192.168.20.2']
 
 
 # Application definition

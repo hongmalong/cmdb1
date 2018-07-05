@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>serverRoom</title>
-	
+
     <meta name="keywords" content="keyword1,keyword2,keyword3">
     <meta name="description" content="this is my page">
     <meta name="content-type" content="text/html; charset=UTF-8">
@@ -40,6 +40,13 @@
                     <td id="serverRoomEmail"><input type="text" placeholder="input"></td>\
                     <td id="serverRoomAddress"><input type="text" placeholder="input"></td>\
                     <td id="serverRoomWebSite"><input type="text" placeholder="input"></td>\
+                    <td id="serverRoomDeployHost">\
+                        <select>\
+                            {% for  equipment in equipments %}\
+                                <option value="{{ equipment.ipAddress }}">{{ equipment.ipAddress }}</option>\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
                     <td id="serverRoomCime"><input type="text"placeholder="autoAdd"></td>\
                 </tr>\
                 ';
@@ -51,7 +58,7 @@
         
             $("input:checked").each(function(i){
 
-                var Array=range(1,10);
+                var Array=range(1,11);
                 //全局变量的声明如果重复会报错 Array.isArray is not a function
                 for (N in Array){
                     tdN='td'+N;
@@ -92,6 +99,9 @@
                         case 9:
                             website_value=tdN_value;
                             break;
+                        case 10:
+                            deployHost_value=tdN_value;
+                            break;
                         default:
                             alert('no '+ N);
                     }
@@ -116,6 +126,7 @@
                         serverRoomEmail:email_value,
                         serverRoomAddress:address_value,
                         serverRoomWebsite:website_value,
+                        serverRoomDeployHost:deployHost_value,
                         
                     },
                     success:function(response,status,xhr){
@@ -197,6 +208,7 @@
             <th>email</th>
             <th>address</th>
             <th>website</th>
+            <th>deployHost</th>
             <th>ctime</th>
         </tr>
         {% for serverRoom in serverRooms %}
@@ -231,6 +243,19 @@
             <td>{{ serverRoom.email }}</td>
             <td>{{ serverRoom.address }}</td>
             <td>{{ serverRoom.website }}</td>
+            <td>
+                <select>
+                    {% for  equipment in equipments %}
+                        {% if equipment.cabinet.serverRoom.company == serverRoom.company %}
+                            <option value="{{ equipment.ipAddress }}"
+                                {% if equipment.ipAddress == serverRoom.deployHost %}
+                                    selected="selected"
+                                {% endif %}
+                            >{{ equipment.ipAddress }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </td>
             <td>{{ serverRoom.ctime }}</td>
         </tr>
         {% endfor %}
