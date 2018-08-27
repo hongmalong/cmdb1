@@ -1,7 +1,9 @@
 #coding:utf8
 from django.shortcuts import render,HttpResponseRedirect,render_to_response
 from django.http import HttpResponse
-import time,os,sys,re,paramiko
+import time,os,sys,re,paramiko,git
+from operator import itemgetter, attrgetter
+    
 
 from .models import CompanyTable,HistoryTable,ProviderTable,ServerRoomTable,CabinetTable,EquipmentTypeTable,\
 EquipmentTable,OccupationTable,PrivateTable,ServiceTypeTable,ProjectTable,ServiceTable,NodeTable,\
@@ -559,6 +561,7 @@ def ServiceType ( request ) :
             new.name= serviceTypeName
             new.version= serviceTypeVersion
             new.portNumber= serviceTypePortNumber
+            new.logPathType= serviceTypeLogPathType
             new.save()
             new= HistoryTable()
             new.contant="add "+serviceTypeName+" to serviceType"
@@ -641,6 +644,7 @@ def Service ( request ) :
     projectes= ProjectTable.objects.all()
     privates= PrivateTable.objects.all()
     serviceTypes= ServiceTypeTable.objects.all()
+    equipments=EquipmentTable.objects.all()
     
     if request.method == 'POST':
         serviceId=request.POST.get('serviceId',None)
@@ -676,6 +680,12 @@ def Service ( request ) :
         serviceMavenCodePath = request.POST.get('serviceMavenCodePath',None)
         serviceTargetFilePath = request.POST.get('serviceTargetFilePath',None)
         serviceMavenParameter = request.POST.get('serviceMavenParameter',None)
+        
+        serviceNginxIp = request.POST.get('serviceNginxIp',None)
+        if serviceNginxIp != None:
+            serviceNginxIpObject=EquipmentTable.objects.get(ipAddress=serviceNginxIp)
+           
+        serviceDomainName=request.POST.get('serviceDomainName',None)
 
         #delete
         if request.POST.get('delSign',None) == 'true':
@@ -703,9 +713,12 @@ def Service ( request ) :
             new.javaVersion= serviceJavaVersion
             new.codeSrc=serviceCodeSrc
             new.mavenCodePath=serviceMavenCodePath
-            new.TargetFilePath=serviceTargetFilePath
+            new.targetFilePath=serviceTargetFilePath
+            print(serviceTargetFilePath)
             new.mavenParameter=serviceMavenParameter
-
+            new.nginxIp=serviceNginxIpObject
+            new.domainName=serviceDomainName
+            new.save()
             new= HistoryTable()
             new.contant="add "+serviceName+" to service"
             new.save()
@@ -725,7 +738,9 @@ def Service ( request ) :
             serviceObject.mavenCodePath=serviceMavenCodePath
             serviceObject.targetFilePath=serviceTargetFilePath
             serviceObject.mavenParameter=serviceMavenParameter
-
+            serviceObject.nginxIp=serviceNginxIpObject
+            serviceObject.domainName=serviceDomainName
+            
             localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
             serviceObject.ctime= localtime
             serviceObject.save()
@@ -734,7 +749,7 @@ def Service ( request ) :
             new.save()
             return HttpResponse('service '+serviceName+' update scusses!')
                 
-    return render_to_response ( 'service.html',{'services':services,'projectes':projectes,'privates':privates,'serviceTypes':serviceTypes} )
+    return render_to_response ( 'service.html',{'services':services,'projectes':projectes,'privates':privates,'serviceTypes':serviceTypes,'equipments':equipments} )
 
 def Enviroment ( request ) :
     companies= CompanyTable.objects.all()
@@ -997,7 +1012,7 @@ def Node ( request ) :
             
             commonLogPath='/'+nodeProject.company.name+'/log/autodepoly/'
             
-            serviceTypes=['tomcat','sprintBoot','dubbo']
+            serviceTypes=['tomcat','springBoot','dubbo']
             for i in serviceTypes:
                 if nodeService.serviceType.name==i:
                     nodeService.serviceType.name='java'
@@ -1185,7 +1200,7 @@ def Mv(srcPath,targetPath,host,sshPort,sshName,eventId,node):
         return log
         
 def Sed(src,target,filePath,host,sshPort,sshName,eventId,node):
-    command=("grep -n "+src+' '+filePath)
+    command=("grep -n '"+src+"' "+filePath)
     result=RemoteControl(host,sshPort,sshName,command,eventId,node)
     if len(result)==0:
         log=host+" : "+'未找到: '+src+(' ')+filePath
@@ -2886,8 +2901,9 @@ def RemoterControlInvoke4ok13(host,port,userName,commands,eventId,node):
     z27=str.encode('[00m')
     z28=str.encode('(yes/no)? ')
     z29=str.encode('正在检出文件')
+    z30=str.encode('[[1;36m')
     
-    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1,z13,z23,z24,z25,z26,z27]
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1,z13,z23,z24,z25,z26,z27,z30]
     doingList=[z22,z15,z29]
     m=1
     b=a.recv(10240)
@@ -2990,15 +3006,20 @@ def RemoterControlInvoke4ok13(host,port,userName,commands,eventId,node):
 def RemoteFileExist(host,port,userName,path):
     import paramiko,time,sys
     private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
-    transport = paramiko.Transport((host, port))
-    transport.connect(username=userName, pkey=private_key)
-    sftp = paramiko.SFTPClient.from_transport(transport)
     try:
+        transport = paramiko.Transport((host, port))
+        transport.connect(username=userName, pkey=private_key)
+        sftp = paramiko.SFTPClient.from_transport(transport)
         sftp.stat(path)
         result="exist"
         transport.close()
-    except IOError:
-        result="not exist"
+    except Exception as msg:
+        #result="not exist"
+        #print("*** file open error", msg)
+        if 'Unable to connect' in str(msg):
+            result='Unable to connect to '+host
+        else:
+            result='not exist'
     return(result)
     
 def addRemoteUser(userName,host,sshPort,sshName,eventId,node):
@@ -3227,8 +3248,9 @@ def DeployLog(log,eventId,node):
     new.log=log
     new.eventId=eventId
     new.node=node
+    print(len(log))
     new.save()
-
+    
 def GetSshPort(host,company):
     companyObject=CompanyTable.objects.get(name=company)
     serverRooms=ServerRoomTable.objects.filter(company=companyObject)
@@ -3284,7 +3306,7 @@ def CheckCommonTools(host,sshPort,sshName,fullPath,oldFileName,newFileName,targe
                 command=("grep -n "+targetPath+' /etc/profile')
                 result=RemoteControl(host,sshPort,sshName,command,eventId,node)
                 if len(result)==0:
-                    log=host+" : "+'未找到: '+src+' /etc/profile '
+                    log=host+" : "+'未找到: '+targetPath+' /etc/profile '
                     DeployLog(log,eventId,node)
                     command='echo export PATH='+targetPath+targetChildPath+'/bin:\$PATH >> /etc/profile;. /etc/profile'
                     RemoteControl(host,sshPort,sshName,command,eventId,node)
@@ -3349,6 +3371,7 @@ def PackageMaven(eventId,appName,company,host,node,mavenCodePath,packagePro,gitC
 def DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,appTargetPackagePath,appUnzipPackageDir,appServicePath,eventId,node):
     #把软件包传上去
     #停止服务
+    #下线nginx，因为tomcat启动速度比程序启动速度快。程序启动没完成前，不能对外提供服务。
     #删除老文件目录
     #创建新文件目录
     #把软件包解压缩进去
@@ -3365,17 +3388,89 @@ def DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,app
     CheckPathAndAdd(serviceHost,serviceSshPort,'root',appDataPath,eventId,node)
     commands='scp -P '+str(serviceSshPort)+' '+appSrcPackagePath+' '+'root'+'@'+serviceHost+':'+appDataPath+'\n'
     result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    #先要判断nginx配置文件是否存在
+    nginxVhostConfig='/'+company+'/app/nginx/conf/vhost/'+appName+'.conf'
+    serviceIP=serviceHost
+    servicePort=((node.portList).split(','))[0]
+    nginxIp=node.service.nginxIp.ipAddress
+    nginxSshPort=node.service.nginxIp.controlPort
+    serverName=appName
+    serviceDomainName=node.service.domainName
+    enviroment=node.enviroment.name
+    project=node.project.name
+    service=node.service.name
+    ipPort=serviceIP+':'+servicePort
+    result=RemoteFileExist(nginxIp,int(nginxSshPort),'root',nginxVhostConfig)
+    #第二次发布，先下线nginxNode
+    if result=='exist' :
+        #1.知道nginx配置文件
+        #nginxVhostConfig
+        #2.知道要替换的字符串
+        #ipPort
+        #用它来判断需要替换的字符串
+        command='cd /'+company+'/app/nginx/conf/vhost/;grep '+ipPort+' *.conf'
+        result=RemoteControl(nginxIp,int(nginxSshPort),'root',command,eventId,node)
+        resultLine=[]
+        if type(result)==type(resultLine):
+            resultLine=(result[0]).strip()
+        else:
+            resultLine=result
+        needReplaceString=(resultLine.split(';'))[0]
+        #拿到需要替换的字符串
+        #2.1.如果第一次发布失败了，会多一个down；
+        #2.2.那么第二次发布，就会往后面补一个down。
+        #2.3.所以，这后面不知道要跟多少个down呢
+        #3.知道替换成的字符串
+        newString=needReplaceString+' down '
+        #4.替换#5.核查替换完后，有没有“替换成的字符串”
+        Sed(needReplaceString,newString,'/'+company+'/app/nginx/conf/vhost/*.conf',nginxIp,int(nginxSshPort),'root',eventId,node)
+    else :
+        print('把nginx配置文件传上去')
+        commonNginxVhostConfig='/'+company+'/src/nginx-vhost.conf'
+        Upload(serviceHost,serviceSshPort,'root',commonNginxVhostConfig,nginxVhostConfig,eventId,node)
+        #替换nginx文件中变量值
+        needReplaceList=['serverName','serviceIP','servicePort','serviceDomainName','company','enviroment','project','service']
+        for i in needReplaceList:
+            Sed(i,locals()[i],nginxVhostConfig,serviceHost,serviceSshPort,'root',eventId,node)
+        serviceNginxLogHome='/'+company+'/log/vhost/'+enviroment+'/'+project+'-'+service+'/'
+        CheckPathAndAdd(nginxIp,int(nginxSshPort),'root',serviceNginxLogHome,eventId,node)
+    #重载nginx
+    commands='/etc/init.d/nginx reload\n'
+    result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,eventId,node)
+    #stop service；
     commands='/etc/init.d/'+appName+' stop\n'
-    commands=commands+';rm -fr '+appDataPath+'/'+'Root\n'
+    result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,eventId,node)
+
+    commands='rm -fr '+appDataPath+'/'+'ROOT\n'
     #commands=commands+';mkdir -p '+appDataPath+'\n'
     #这次解压缩的结果是一个目录
     commands=commands+';unzip '+appTargetPackagePath+' -d '+appDataPath+'/'+appUnzipPackageDir+'\n'
     appDataFullPath=appDataPath+'/'+appUnzipPackageDir
     commands=commands+';ln -sf '+appDataFullPath+' '+appServicePath+'/webapps/'+appUnzipPackageDir+'\n'
     commands=commands+';/etc/init.d/'+appName+' start\n'
-    #print(commands)
     result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,eventId,node)
-    #print(result)
+    #nginx上线
+    #1.知道nginx配置文件
+    #nginxVhostConfig
+    #2.知道要替换的字符串
+    #ipPort
+    #用它来判断需要替换的字符串
+    command='cd /'+company+'/app/nginx/conf/vhost/;grep '+ipPort+' *.conf'
+    result=RemoteControl(nginxIp,int(nginxSshPort),'root',command,eventId,node)
+    resultLine=[]
+    if type(result)==type(resultLine):
+        resultLine=(result[0]).strip()
+    else:
+        resultLine=result
+    needReplaceString=(resultLine.split(';'))[0]
+    #print(needReplaceString)
+    #拿到需要替换的字符串
+    newString=needReplaceString.replace(' down ','')
+    #4.替换
+    Sed(needReplaceString,newString,'/'+company+'/app/nginx/conf/vhost/*.conf',nginxIp,int(nginxSshPort),'root',eventId,node)
+    #5.重载nginx
+    commands='/etc/init.d/nginx reload\n'
+    result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,eventId,node)
     
 def DeployForSpringBoot(serviceHost,eventId,node,deployHost,company):
     #def DeployForSpringBoot(serviceHost,eventId,node,deployHost,company):
@@ -3453,7 +3548,7 @@ def DeployForDubbo(serviceHost,eventId,node,deployHost,company):
     #停止服务
     serviceInitFile='/etc/init.d/'+serviceName
     commands=serviceInitFile+' stop\n'
-    result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
+    result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,eventId,node)
     #上传软件包,原来存在的话，覆盖
     commands='scp -P '+str(serviceSshPort)+' '+servicePackagePath+' '+'root'+'@'+serviceHost+':'+serviceUploadPackagePath+'\n'
     result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
@@ -3478,7 +3573,7 @@ def DeployForDubbo(serviceHost,eventId,node,deployHost,company):
 
     serviceStartScript='/bin/start.sh'
     serviceStopScript='/bin/stop.sh'
-    needReplaceList=['serviceName','serviceJavaHome','serviceLogHome','serviceWorkDir','serviceUser','serviceStartScript']
+    needReplaceList=['serviceName','serviceJavaHome','serviceLogHome','serviceWorkDir','serviceUser','serviceStartScript','serviceStopScript']
     #上传init文件
     commands='scp -P '+str(serviceSshPort)+' '+sprintBootCommonInitFile+' '+'root'+'@'+serviceHost+':'+'/etc/init.d/'+serviceName+'\n'
     result=RemoterControlInvoke4ok13(deployHost,deployHostSshPort,'root',commands,eventId,node)
@@ -3495,8 +3590,6 @@ def DeployForDubbo(serviceHost,eventId,node,deployHost,company):
     #启动服务
     servicePort=((node.portList).split(','))[0]
     StartApp(serviceName,servicePort,serviceHost,serviceSshPort,'root',eventId,node,company)
-    
-    
     
 def Do(request):
     companyName='rgec'
@@ -3524,7 +3617,9 @@ def Do(request):
                 javaVersion=nodeObject.service.javaVersion
                 appPath='/'+companyName+'/app/autodepoly/'+serviceType+'/'+appName+'-tomcat-'+tomcatVersion
                 exist=RemoteFileExist(host,int(controlPort),'root',appPath)
-                if exist != 'exist':
+                if 'Unable to connect ' in exist:
+                    return HttpResponse(exist)
+                elif exist != 'exist':
                     log=host+" : "+(appPath+'目录不存在，需要安装tomcat')
                     DeployLog(log,eventId,nodeObject)
                     result=InstallTomcat(host,'root',int(controlPort),portList,appPath,eventId,nodeObject,tomcatVersion,company,javaVersion,appName)
@@ -3633,6 +3728,7 @@ def SelectService(request):
 def GetRange(request):
     if request.method=='POST':
         AName=request.POST.get('AName',None)
+        
         ATable=request.POST.get('ATable',None)
         BTable=request.POST.get('BTable',None)
         BColmn=request.POST.get('BColmn',None)
@@ -3654,7 +3750,57 @@ def GetRange(request):
 def Help(request):
     return HttpResponse('ok')
 
-
+def GetGitList(request):
+    g = git.cmd.Git()
+    heads=g.ls_remote('https://git_autodeploy:123abc45@git.rograndec.com/mph/www.mypharma.com.git')
+    headsList=heads.split('\n')
+    branchs=[]
+    for i in headsList:
+        if '{}' not in i:
+            branchAll=(i.split('\t'))[-1]
+            branch=(branchAll.split('/'))[-1]
+            branchs.append(branch)
+    branchs=list(set(branchs))
+    branchs.sort()
+    branchsa=[]
+    branchsHead=[]
+    for i in branchs:
+        if '.' in i:
+            branchs.remove(i)
+            c=i.split('.')
+            d=[]
+            for j in c:
+                d.append(int(j))
+            branchsa.append(d)
+        else:
+            branchsHead.append(i)
+            
+    branchsa=sorted(branchsa,key=itemgetter(0,1,2,-1),reverse=True)
+    
+    branchTag=[]
+    for i in branchsa:
+        m=''
+        p=1
+        for n in i:
+            if p == len(i) :
+                m+=str(n)
+            else:
+                m+=str(n)+'.'
+            p+=1
+        branchTag.append(m)
+        
+    branchTagStr=''
+    n=1
+    for q in branchTag:
+        if n==len(branchTag):
+            branchTagStr+=q
+        else:
+            branchTagStr+=q+'@@'
+        n+=1
+        #print(q)
+    #for p in branchsHead:
+    #    print(p)   
+    return HttpResponse(branchTagStr)
 
 
 

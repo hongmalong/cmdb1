@@ -13,7 +13,6 @@
     <script type="text/javascript" src="{% static 'js/jquery-3.3.1.js' %}"></script>
     <script type="text/javascript" src="{% static 'js/common.js' %}"></script>
     <script type="text/javascript" >
-
     $(document).ready(function(){
         $("#addbtn").click(function(){
             var a = '\
@@ -34,17 +33,17 @@
                             {% endfor %}\
                         </select>\
                     </td>\
-                    <td id="nodeProject">\
+                    <td id="nodeProjectSelect">\
                         <select  class="nodeProjectSelect">\
                             {% for  project in projects %}\
-                                <option value="{{ project.name }}">{{ project.name }}</option>\
+                                <option value="{{ project.name }}" >{{ project.name }}</option>\
                             {% endfor %}\
                         </select>\
                     </td>\
-                    <td id="nodeService">\
+                    <td id="serviceggc">\
                         <select>\
                             {% for  service in services %}\
-                                <option value="{{ service.name }}">{{ service.name }}</option>\
+                                <option value="{{ service.name }}" >{{ service.name }}</option>\
                             {% endfor %}\
                         </select>\
                     </td>\
@@ -64,14 +63,146 @@
                     <td id="nodeCime"><input type="text"placeholder="autoAdd"></td>\
                 </tr>\
                 ';
-            $("#nodeTable").append(a);
+            var romObject=document.createElement('tr');
+            
+            var checkObject=document.createElement('td');
+            checkObject.innerHTML='<input id="choice" type="checkbox">';
+            
+            var idObject=document.createElement('td');
+            idObject.innerHTML='<input type="text" placeholder="autoAdd">';
+            idObject.id='nodeId'
+            
+            var enviromentObject=document.createElement('td');
+                enviromentObject.id='nodeEnviroment';
+                var selcetObject=document.createElement('select');
+                {% for  enviroment in enviroments %}
+                    selcetObject.innerHTML+='<option value="{{ enviroment.name }}">{{ enviroment.name }}</option>'
+                {% endfor %}
+                enviromentObject.append(selcetObject);
+                
+            var serverRoomObject=document.createElement('td');
+                serverRoomObject.id='nodeServerRoom';
+                var selcetObject=document.createElement('select');
+                {% for  serverRoom in serverRooms %}
+                    selcetObject.innerHTML+='<option value="{{ serverRoom.name }}">{{ serverRoom.name }}</option>'
+                {% endfor %}
+                serverRoomObject.append(selcetObject);
+                
+            var projectObject=document.createElement('td');
+                projectObject.id='nodeProject';
+                var selcetObject=document.createElement('select');
+                selcetObject.className='nodeProjectSelect';
+                {% for  project in projects %}
+                    selcetObject.innerHTML+='<option value="{{ project.name }}">{{ project.name }}</option>'
+                {% endfor %}
+                projectObject.append(selcetObject);
+                
+            var serviceObject=document.createElement('td');
+                serviceObject.id='nodeService';
+                var selcetObject=document.createElement('select');
+                selcetObject.innerHTML+='<option >请先选择project</option>'
+                serviceObject.append(selcetObject);
+            
+            var nodeNumberObject=document.createElement('td');
+                nodeNumberObject.id="nodeNodeNumber"
+                nodeNumberObject.innerHTML='<input type="text"placeholder="mustAdd">'
+            
+            var ipObject=document.createElement('td');
+                ipObject.id='nodeIp';
+                var selcetObject=document.createElement('select');
+                selcetObject.class='nodeIpSelect';
+                {% for  equipment in equipments %}
+                    selcetObject.innerHTML+='<option value="{{ equipment.ipAddress }}">{{ equipment.ipAddress }}</option>'
+                {% endfor %}
+                ipObject.append(selcetObject);
+            
+            var nodePortListObject=document.createElement('td');
+                nodePortListObject.id="nodePortList"
+                nodePortListObject.innerHTML='<input type="text"placeholder="autoAdd">'
+                
+            var nodeLogPathListObject=document.createElement('td');
+                nodeLogPathListObject.id="nodeLogPathList"
+                nodeLogPathListObject.innerHTML='<input type="text"placeholder="autoAdd">'
+                
+            var nodeBranchObject=document.createElement('td');
+                nodeBranchObject.id="nodeLogPathList"
+                nodeBranchObject.innerHTML='<input type="text"placeholder="Add">'
+                
+            var nodeSpringBootStartProfileObject=document.createElement('td');
+                nodeSpringBootStartProfileObject.id="nodeSpringBootStartProfile"
+                nodeSpringBootStartProfileObject.innerHTML='<input type="text"placeholder="Add">'
+                
+            var nodeMemoryObject=document.createElement('td');
+                nodeMemoryObject.id="nodeMemory"
+                nodeMemoryObject.innerHTML='<input type="text"placeholder="Add">'
+                
+            var nodeCtimeObject=document.createElement('td');
+                nodeCtimeObject.id="nodeCtime"
+                nodeCtimeObject.innerHTML='<input type="text"placeholder="autoAdd">'
+                
+            var nodeCountObject=document.createElement('td');
+                nodeCountObject.id="nodeCount"
+                nodeCountObject.innerHTML='<input type="text"placeholder="autoAdd">'
+            
+            var needAddArray=[checkObject,idObject,enviromentObject,serverRoomObject,projectObject,serviceObject,nodeNumberObject,ipObject,nodePortListObject,nodeLogPathListObject,nodeBranchObject,nodeSpringBootStartProfileObject,nodeMemoryObject,nodeCtimeObject,nodeCountObject]
+            for (i in needAddArray){
+                romObject.append(needAddArray[i]);
+            }
+            
+            $("#nodeTable").append(romObject);
+            
+            $(".nodeProjectSelect").change(function(){
+            rowObject=this.parentNode.parentNode;
+            projectName=this.value;
+            //alert(projectName)
+                
+            $.ajax({
+                type:'POST',
+                url:'/selectService',
+                data:{
+                    //projectName:projectName,
+                    AName:projectName,
+                    ATable:'ProjectTable',
+                    BTable:'ServiceTable',
+                    BColmn:'project',
+                    
+                },
+                success:function(response,status,xhr){
+                    responseList=response.split('@@')
+                    //alert(responseList)
+                    //alert(serviceObjectSelect.innerHTML);
+                    //alert(rowObject.children[id="serviceggc"])
+
+                    //alert((rowObject.children[id="serviceggc"]).length)
+                    //serviceObjectSelect=rowObject.children[id="serviceggc"]
+                    //for (i in rowObject.children[id="serviceggc"]){
+                    //    alert(i)
+                    //}
+                    //serviceObjectSelect=rowObject.children[5]
+                    serviceObjectSelect=rowObject.children[id="nodeService"];
+                    
+                    serviceObjectSelect.innerHTML='';
+                    var txt3=document.createElement('select');
+                    //serviceObjectSelect.append('<select>');           
+                    for (i in responseList){
+                        //alert(responseList[i])
+                        //a='<option value='+responseList[i]+'>'+responseList[i]+'</option>';
+                        //serviceObjectSelect.innerHTML+=a;
+                        txt3.innerHTML+='<option value="'+responseList[i]+'">'+responseList[i]+'</option>';
+                    }
+                    serviceObjectSelect.append(txt3);
+                    serviceObjectSelect.innerHTML+='</select>';
+                    //alert(serviceObjectSelect.innerHTML);
+                    },
+                    
+                });
+        });
         });
     
         
         $("#upload").click(function(){
         
             $("input:checked").each(function(i){
-
                 var Array=range(1,13);
                 //全局变量的声明如果重复会报错 Array.isArray is not a function
                 for (N in Array){
@@ -84,7 +215,6 @@
                         //这是add
                         tdN_value=tdN.children().eq(0).val();
                     }
-
                     switch (parseInt(N)) {
                         case 1:
                             id_value=tdN_value;
@@ -127,7 +257,6 @@
                             //alert('no '+ N);
                     }
                 }
-
                 if (nodeNumber_value==""){
                     alert("nodeNumber is not empty.");
                     return
@@ -195,7 +324,6 @@
              });
         });
         
-
         $("#delbtn").click(function(){
             $("input:checked").each(function(i){
                 choiceRow=$(this).parents('tr')
@@ -274,7 +402,6 @@
                             //alert('no '+ N);
                     }
                 }
-
                 if (nodeNumber_value==""){
                     alert("nodeNumber is not empty.");
                     return
@@ -340,13 +467,12 @@
                 */
             });
         });
-
-        $(".nodeProjectSelect").change(function(){
+        $(".nodeProjectSelect").click(function(){
             rowObject=this.parentNode.parentNode;
             serviceObject=rowObject.children;
-            //alert(serviceObject.innerHTML);
+            //alert(this.parentNode.parentNode.innerHTML);
             serviceObjectSelect=serviceObject.service.children[0]
-            //alert(serviceObjectSelect.innerHTML);
+            //alert((rowObject.children)[0].innerHTML);
             
             //for (i in serviceObjectSelect){
             //    alert(i+":"+serviceObjectSelect[i])
@@ -379,6 +505,13 @@
                     
                 });
         });
+        $(".branch").click(
+            function(){
+                rowObject=this.parentNode
+                nodeId=rowObject.children.id
+                alert(nodeId.innerHTML)
+            }
+        );
 });
        
     
@@ -391,7 +524,7 @@
     <button id="upload" >save</button>
     <button id="do" >deploy</button>
     <button id="viewDeployLog" >viewDeployLog</button>
-    <table border=1 cellspacing="0" id="nodeTable">
+    <table border=1 cellspacing="0" >
         <tr>
             <th>0</th>
             <th>id</th>
@@ -409,76 +542,78 @@
             <th>ctime</th>
             <th>count</th>
         </tr>
-        {% for node in nodes %}
-        <tr>
-            <td><input type="checkbox"></td>
-            <td>{{ node.id }}</td>
-            <td>
-                <select>
-                    {% for enviroment in enviroments  %}
-                        <option value="{{ enviroment.name }}"
-                            {% if enviroment.name == node.enviroment.name %}
-                                selected="selected"
-                            {% endif %}
-                        >{{ enviroment.name}}</option>
-                    {% endfor %}
-                </select>
-            </td>
-            <td>
-                <select>
-                    {% for serverRoom in serverRooms  %}
-                        <option value="{{ serverRoom.name }}"
-                            {% if serverRoom.name == node.serverRoom.name %}
-                                selected="selected"
-                            {% endif %}
-                        >{{ serverRoom.name}}</option>
-                    {% endfor %}
-                </select>
-            </td>
-            <td>
-                <select class='nodeProjectSelect'>
-                    {% for project in projects  %}
-                        <option value="{{ project.name }}"
-                            {% if project.name == node.project.name %}
-                                selected="selected"
-                            {% endif %}
-                        >{{ project.name}}</option>
-                    {% endfor %}
-                </select>
-            </td>
-            <td id='service'>
-                <select>
-                    {% for service in services  %}
-                        <option value="{{ service.name }}"
-                            {% if service.name == node.service.name %}
-                                selected="selected"
-                            {% endif %}
-                        >{{ service.name}}</option>
-                    {% endfor %}
-                </select>
-            </td>
-            <td>{{ node.nodeNumber }}</td>
-            <td>
-                <select>
-                    {% for equipment in equipments  %}
-                        <option value="{{ equipment.ipAddress }}"
-                            {% if equipment.ipAddress == node.ip.ipAddress %}
-                                selected="selected"
-                            {% endif %}
-                        >{{ equipment.ipAddress}}</option>
-                    {% endfor %}
-                </select>
-            </td>
-            <td>{{ node.portList }}</td>
-            <td>{{ node.logPathList }}</td>
-            <td>{{ node.branch }}</td>
-
-            <td>{{ node.springBootStartProfile }}</td>
-            <td>{{ node.memory}}</td>
-            <td>{{ node.ctime}}</td>
-            <td>{{ forloop.counter }}</td>
-        </tr>
-        {% endfor %}
+        <tbody id="nodeTable">
+            {% for node in nodes %}
+            <tr>
+                <td><input type="checkbox"></td>
+                <td id='id'>{{ node.id }}</td>
+                <td>
+                    <select>
+                        {% for enviroment in enviroments  %}
+                            <option value="{{ enviroment.name }}"
+                                {% if enviroment.name == node.enviroment.name %}
+                                    selected="selected"
+                                {% endif %}
+                            >{{ enviroment.name}}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <select>
+                        {% for serverRoom in serverRooms  %}
+                            <option value="{{ serverRoom.name }}"
+                                {% if serverRoom.name == node.serverRoom.name %}
+                                    selected="selected"
+                                {% endif %}
+                            >{{ serverRoom.name}}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <select class='nodeProjectSelect'>
+                        {% for project in projects  %}
+                            <option value="{{ project.name }}"
+                                {% if project.name == node.project.name %}
+                                    selected="selected"
+                                {% endif %}
+                            >{{ project.name}}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td id='service'>
+                    <select>
+                        {% for service in services  %}
+                            <option value="{{ service.name }}"
+                                {% if service.name == node.service.name %}
+                                    selected="selected"
+                                {% endif %}
+                            >{{ service.name}}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>{{ node.nodeNumber }}</td>
+                <td>
+                    <select>
+                        {% for equipment in equipments  %}
+                            <option value="{{ equipment.ipAddress }}"
+                                {% if equipment.ipAddress == node.ip.ipAddress %}
+                                    selected="selected"
+                                {% endif %}
+                            >{{ equipment.ipAddress}}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>{{ node.portList }}</td>
+                <td>{{ node.logPathList }}</td>
+                <td class='branch'>{{ node.branch }}</td>
+    
+                <td>{{ node.springBootStartProfile }}</td>
+                <td>{{ node.memory}}</td>
+                <td>{{ node.ctime}}</td>
+                <td>{{ forloop.counter }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
 
  </body>

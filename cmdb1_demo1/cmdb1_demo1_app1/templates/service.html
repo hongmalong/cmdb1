@@ -76,6 +76,14 @@
                     <td id="mavenCodePath"><input type="text"></td>\
                     <td id="targetFilePath"><input type="text"></td>\
                     <td id="mavenParameter"><input type="text"></td>\
+                    <td id="nginxIp">\
+                        <select>\
+                            {% for  equipment in equipments %}\
+                                <option value="{{ equipment.ipAddress }}">{{ equipment.ipAddress }}</option>\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
+                    <td id="domainName"><input type="text"></td>\
                     <td id="serviceCime"><input type="text"placeholder="autoAdd"></td>\
                 </tr>\
                 ';
@@ -87,7 +95,7 @@
         
             $("input:checked").each(function(i){
 
-                var Array=range(1,14);
+                var Array=range(1,16);
                 //全局变量的声明如果重复会报错 Array.isArray is not a function
                 for (N in Array){
                     tdN='td'+N;
@@ -140,12 +148,17 @@
                         case 13:
                             mavenParameter_value=tdN_value;;
                             break;
-
+                        case 14:
+                            nginxIp_value=tdN_value;;
+                            break;
+                        case 15:
+                            domainName_value=tdN_value;;
+                            break;
                         default:
                             alert('no '+ N);
                     }
                 }
-
+                
                 if (name_value==""){
                     alert("name is not empty.");
                     return
@@ -168,6 +181,8 @@
                         serviceMavenCodePath:mavenCodePath_value,
                         serviceTargetFilePath:targetFilePath_value,
                         serviceMavenParameter:mavenParameter_value,
+                        serviceNginxIp:nginxIp_value,
+                        serviceDomainName:domainName_value,
 
                     },
                     success:function(response,status,xhr){
@@ -252,6 +267,8 @@
             <th>mavenCodePath</th>
             <th>targetFilePath</th>
             <th>mavenParameter</th>
+            <th>nginxIp</th>
+            <th>domainName</th>
             <th>ctime</th>
         </tr>
         {% for service in services %}
@@ -330,6 +347,18 @@
             <td>{{ service.mavenCodePath }}</td>
             <td>{{ service.targetFilePath }}</td>
             <td>{{ service.mavenParameter }}</td>
+            <td>
+                <select>
+                    {% for equipment in equipments  %}
+                        <option value="{{ equipment.ipAddress }}"
+                            {% if equipment.ipAddress == service.nginxIp.ipAddress %}
+                                selected="selected"
+                            {% endif %}
+                        >{{ equipment.ipAddress}}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>{{ service.domainName }}</td>
             <td>{{ service.ctime }}</td>
         </tr>
         {% endfor %}

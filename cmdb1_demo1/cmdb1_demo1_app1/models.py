@@ -136,10 +136,12 @@ class ServiceTable ( models.Model ) :
     operationEngineer= models.ForeignKey(PrivateTable,null=True, blank=True,on_delete=models.CASCADE,related_name = "operationEngineer")
     serviceType= models.ForeignKey(ServiceTypeTable,null=True, blank=True,on_delete=models.CASCADE)
     javaVersion = models.CharField(max_length=50,null=True)
-    codeSrc = models.CharField(max_length=500,null=True)
+    codeSrc = models.CharField(max_length=501,null=True)
     mavenCodePath = models.CharField(max_length=500,null=True)
     targetFilePath = models.CharField(max_length=500,null=True)
     mavenParameter = models.CharField(max_length=500,null=True)
+    nginxIp = models.ForeignKey(EquipmentTable,null=True, blank=True,on_delete=models.CASCADE)
+    domainName= models.CharField(max_length=50,null=True)
     def __unicode__(self):
         return self.name
         
@@ -199,7 +201,7 @@ class HistoryTable ( models.Model ) :
 class DeployLogTable (models.Model ):
     id = models.AutoField('ID',primary_key=True)
     eventId = models.CharField(max_length=5000,null=True)
-    log=models.CharField(max_length=5000,null=True)
+    log=models.CharField(max_length=6587,null=True)
     localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
     ctime= models.CharField(max_length=49,null=True,default=localtime)
     node = models.ForeignKey(NodeTable,null=True, blank=True,on_delete=models.CASCADE)

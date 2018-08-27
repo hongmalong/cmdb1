@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>provider</title>
+	
+    <meta name="keywords" content="keyword1,keyword2,keyword3">
+    <meta name="description" content="this is my page">
+    <meta name="content-type" content="text/html; charset=UTF-8">
+
+    <script type="text/javascript"  ></script>
+        
+    {% load static %}
+    <script type="text/javascript" src="{% static 'js/jquery-3.3.1.js' %}"></script>
+    <script type="text/javascript" src="{% static 'js/common.js' %}"></script>
+    <script type="text/javascript" >
+
+    $(document).ready(function(){
+        $("#addbtn").click(function(){
+            var a = '\
+                <tr>\
+                    <td><input id="choice" type="checkbox"/></td>\
+                    <td id="providerId"><input type="text" placeholder="autoAdd"></td>\
+                    <td id="providerName"><input type="text" placeholder="must input"></td>\
+                    <td id="providerContacts"><input type="text" placeholder="input"></td>\
+                    <td id="providerTelephone"><input type="text" placeholder="input"></td>\
+                    <td id="providerEmail"><input type="text" placeholder="input"></td>\
+                    <td id="providerAddress"><input type="text" placeholder="input"></td>\
+                    <td id="providerWebSite"><input type="text" placeholder="input"></td>\
+                    <td id="providerCime"><input type="text"placeholder="autoAdd"></td>\
+                </tr>\
+                ';
+                $("#providerTable").append(a);        
+        });
+    
+        
+        $("#upload").click(function(){
+        
+            $("input:checked").each(function(i){
+                
+                var Array=range(1,8);
+                //全局变量的声明如果重复会报错 Array.isArray is not a function
+                for (N in Array){
+                    tdN='td'+N;
+                    tdN=$(this).parents('tr').children().eq(N);
+                    if (tdN.children().length==0){
+                        //这是update
+                        tdN_value=tdN.text();
+                    }else{
+                        //这是add
+                        tdN_value=tdN.children().eq(0).val();
+                    }
+
+                    switch (parseInt(N)) {
+                        case 1:
+                            id_value=tdN_value;
+                            break;
+                        case 2:
+                            name_value=tdN_value;;
+                            break;
+                        case 3:
+                            contacts_value=tdN_value;
+                            break;
+                        case 4:
+                            telephone_value=tdN_value;
+                            break;
+                        case 5:
+                            email_value=tdN_value;
+                            break;
+                        case 6:
+                            address_value=tdN_value;
+                            break;
+                        case 7:
+                            website_value=tdN_value;
+                            break;
+                        default:
+                            alert('no '+ N);
+                    }
+                }
+
+                if (name_value==""){
+                    alert("name is not empty.");
+                    return
+                }
+                
+                $.ajax({
+                    type:'POST',
+                    url:'/provider',
+                    data:{
+                    
+                        providerId:id_value,
+                        providerName:name_value,
+                        providerContacts:contacts_value,
+                        providerTelephone:telephone_value,
+                        providerEmail:email_value,
+                        providerAddress:address_value,
+                        providerWebsite:website_value,
+                        
+                    },
+                    success:function(response,status,xhr){
+                        alert(response);
+                    },
+                });
+                
+            });
+        });
+     
+        $("table tr td").dblclick(function(){
+             //获取td对象
+             var td = $(this);
+             //获取td对象的文本内容
+             var old_text = td.text();
+             //新定义一个input对象，文本内容为原td的文本内容
+             var input_obj = $("<input type='text'>").val(old_text);
+             td.text("");
+             //td对象的文本内容清空
+             td.append(input_obj);
+             //给td添加新的元素
+             //当input对象失去焦点时，的操作
+             input_obj.blur(function(){
+                 //获取input的val
+                 var new_text = $(this).val();
+                 //删除input对象
+                 $(this).remove();
+                 //给td的文本内容加新值，原input的文本内容
+                 td.text(new_text);
+             });
+        });
+        
+
+        $("#delbtn").click(function(){
+            $("input:checked").each(function(i){
+                choiceRow=$(this).parents('tr')
+                id_value=choiceRow.children().eq(1).text();
+                delSign=confirm('are you sure delete '+choiceRow.children().eq(2).text()+'?')
+                
+                if (delSign == true){
+                    $.ajax({
+                        type:'POST',
+                        url:'/provider',
+                        data:{
+                            providerId:id_value,
+                            delSign:delSign,
+                        },
+                        success:function(response,status,xhr){
+                        alert(response);
+                        }
+                    });}
+                else{
+                    return
+                }
+                
+                choiceRow.remove();
+            });
+        });
+    });
+
+       
+    
+    </script>
+    
+  </head>
+  <body>
+    <button id="addbtn" >表格加一行</button>
+    <button id="delbtn" >表格减一行</button>
+    <button id="upload" >提交</button>
+    <table border=1 cellspacing="0" id="providerTable">
+        <tr>
+            <th>0</th>
+            <th>id</th>
+            <th>name</th>
+            <th>contacts</th>
+            <th>telephone</th>
+            <th>email</th>
+            <th>address</th>
+            <th>website</th>
+            <th>ctime</th>
+        </tr>
+        {% for provider in providers %}
+        <tr>
+            <td><input type="checkbox"></td>
+            <td>{{ provider.id }}</td>
+            <td>{{ provider.name }}</td>
+            <td>{{ provider.contacts }}</td>
+            <td>{{ provider.telephone }}</td>
+            <td>{{ provider.email }}</td>
+            <td>{{ provider.address }}</td>
+            <td>{{ provider.website }}</td>
+            <td>{{ provider.ctime }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+ </body>
+<html>

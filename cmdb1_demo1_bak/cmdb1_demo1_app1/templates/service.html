@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>services</title>
+	
+    <meta name="keywords" content="keyword1,keyword2,keyword3">
+    <meta name="description" content="this is my page">
+    <meta name="content-type" content="text/html; charset=UTF-8">
+
+    <script type="text/javascript"  ></script>
+        
+    {% load static %}
+    <script type="text/javascript" src="{% static 'js/jquery-3.3.1.js' %}"></script>
+    <script type="text/javascript" src="{% static 'js/common.js' %}"></script>
+    <script type="text/javascript" >
+
+    $(document).ready(function(){
+        $("#addbtn").click(function(){
+            var a = '\
+                <tr>\
+                    <td><input id="choice" type="checkbox"/></td>\
+                    <td id="serviceId"><input type="text" placeholder="autoAdd"></td>\
+                    <td id="serviceName"><input type="text" placeholder="must input"></td>\
+                    <td id="serviceProject">\
+                        <select>\
+                            {% for projecte in projectes %}\
+                                <option value="{{ projecte.name }}">{{ projecte.name }}</option>\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
+                    <td id="serviceProgrammer">\
+                        <select>\
+                            {% for private in privates %}\
+                                {% if private.occupation.name == "programmer" %}\
+                                    <option value="{{ private.name }}">{{ private.name }}</option>\
+                                {% endif %}\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
+                    <td id="serviceTestEngineer">\
+                        <select>\
+                            {% for private in privates %}\
+                                {% if private.occupation.name == "testEngineer" %}\
+                                    <option value="{{ private.name }}">{{ private.name }}</option>\
+                                {% endif %}\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
+                    <td id="serviceProductManager">\
+                        <select>\
+                            {% for private in privates %}\
+                                {% if private.occupation.name == "productManager" %}\
+                                    <option value="{{ private.name }}">{{ private.name }}</option>\
+                                {% endif %}\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
+                    <td id="serviceOperationEngineer">\
+                       <select>\
+                            {% for private in privates %}\
+                                {% if private.occupation.name == "operationEngineer" %}\
+                                    <option value="{{ private.name }}">{{ private.name }}</option>\
+                                {% endif %}\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
+                    <td id="serviceServiceType">\
+                        <select>\
+                            {% for serviceType in serviceTypes %}\
+                                <option value="{{ serviceType.name }}">{{ serviceType.name }}</option>\
+                            {% endfor %}\
+                        </select>\
+                    </td>\
+                    <td id="javaVersion"><input type="text"></td>\
+                    <td id="codeSrc"><input type="text"></td>\
+                    <td id="mavenCodePath"><input type="text"></td>\
+                    <td id="targetFilePath"><input type="text"></td>\
+                    <td id="mavenParameter"><input type="text"></td>\
+                    <td id="serviceCime"><input type="text"placeholder="autoAdd"></td>\
+                </tr>\
+                ';
+                $("#serviceTable").append(a);        
+        });
+    
+        
+        $("#upload").click(function(){
+        
+            $("input:checked").each(function(i){
+
+                var Array=range(1,14);
+                //全局变量的声明如果重复会报错 Array.isArray is not a function
+                for (N in Array){
+                    tdN='td'+N;
+                    tdN=$(this).parents('tr').children().eq(N);
+                    if (tdN.children().length==0){
+                        //这是update
+                        tdN_value=tdN.text();
+                    }else{
+                        //这是add
+                        tdN_value=tdN.children().eq(0).val();
+                    }
+
+                    switch (parseInt(N)) {
+                        case 1:
+                            id_value=tdN_value;
+                            break;
+                        case 2:
+                            name_value=tdN_value;;
+                            break;
+                        case 3:
+                            project_value=tdN_value;;
+                            break;
+                        case 4:
+                            programmer_value=tdN_value;;
+                            break;
+                        case 5:
+                            testEngineer_value=tdN_value;;
+                            break;
+                        case 6:
+                            productManager_value=tdN_value;;
+                            break;
+                        case 7:
+                            operationEngineer_value=tdN_value;;
+                            break;
+                        case 8:
+                            serviceType_value=tdN_value;;
+                            break;
+                        case 9:
+                            javaVersion_value=tdN_value;;
+                            break;
+                        case 10:
+                            codeSrc_value=tdN_value;;
+                            break;
+                        case 11:
+                            mavenCodePath_value=tdN_value;;
+                            break;
+                        case 12:
+                            targetFilePath_value=tdN_value;;
+                            break;
+                        case 13:
+                            mavenParameter_value=tdN_value;;
+                            break;
+
+                        default:
+                            alert('no '+ N);
+                    }
+                }
+
+                if (name_value==""){
+                    alert("name is not empty.");
+                    return
+                }
+                
+                $.ajax({
+                    type:'POST',
+                    url:'/service',
+                    data:{
+                        serviceId:id_value,
+                        serviceName:name_value,
+                        serviceProject:project_value,
+                        serviceProgrammer:programmer_value,
+                        serviceTestEngineer:testEngineer_value,
+                        serviceProductManager:productManager_value,
+                        serviceOperationEngineer:operationEngineer_value,
+                        serviceServiceType:serviceType_value,
+                        serviceJavaVersion:javaVersion_value,
+                        serviceCodeSrc:codeSrc_value,
+                        serviceMavenCodePath:mavenCodePath_value,
+                        serviceTargetFilePath:targetFilePath_value,
+                        serviceMavenParameter:mavenParameter_value,
+
+                    },
+                    success:function(response,status,xhr){
+                        alert(response);
+                    },
+                });
+            });
+        });
+     
+        $("table tr td").dblclick(function(){
+             //获取td对象
+             var td = $(this);
+             //获取td对象的文本内容
+             var old_text = td.text();
+             //新定义一个input对象，文本内容为原td的文本内容
+             var input_obj = $("<input type='text'>").val(old_text);
+             td.text("");
+             //td对象的文本内容清空
+             td.append(input_obj);
+             //给td添加新的元素
+             //当input对象失去焦点时，的操作
+             input_obj.blur(function(){
+                 //获取input的val
+                 var new_text = $(this).val();
+                 //删除input对象
+                 $(this).remove();
+                 //给td的文本内容加新值，原input的文本内容
+                 td.text(new_text);
+             });
+        });
+        
+
+        $("#delbtn").click(function(){
+            $("input:checked").each(function(i){
+                choiceRow=$(this).parents('tr')
+                id_value=choiceRow.children().eq(1).text();
+                delSign=confirm('are you sure delete '+choiceRow.children().eq(2).text()+'?')
+                
+                if (delSign == true){
+                    $.ajax({
+                        type:'POST',
+                        url:'/service',
+                        data:{
+                            serviceId:id_value,
+                            delSign:delSign,
+                        },
+                        success:function(response,status,xhr){
+                        alert(response);
+                        }
+                    });}
+                else{
+                    return
+                }
+                
+                choiceRow.remove();
+            });
+        });
+    });
+
+       
+    
+    </script>
+    
+  </head>
+  <body>
+    <button id="addbtn" >表格加一行</button>
+    <button id="delbtn" >表格减一行</button>
+    <button id="upload" >提交</button>
+    <table border=1 cellspacing="0" id="serviceTable">
+        <tr>
+            <th>0</th>
+            <th>id</th>
+            <th>name</th>
+            <th>project</th>
+            <th>programmer</th>
+            <th>testEngineer</th>
+            <th>productManager</th>
+            <th>operationEngineer</th>
+            <th>serviceType</th>
+            <th>javaVersion</th>
+            <th>codeSrc</th>
+            <th>mavenCodePath</th>
+            <th>targetFilePath</th>
+            <th>mavenParameter</th>
+            <th>ctime</th>
+        </tr>
+        {% for service in services %}
+        <tr>
+            <td><input type="checkbox"></td>
+            <td>{{ service.id }}</td>
+            <td>{{ service.name }}</td>
+            <td>
+                <select>
+                    {% for project in projectes %}
+                        <option value="{{ project.name }}" 
+                        {% if project.name == service.project.name %}
+                            selected="selected"
+                        {% endif %}
+                        >{{ project.name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <select>
+                    {% for private in privates %}
+                        <option value="{{ private.name }}" 
+                        {% if private.name == service.programmer.name %}
+                            selected="selected"
+                        {% endif %}
+                        >{{ private.name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <select>
+                    {% for private in privates %}
+                        <option value="{{ private.name }}" 
+                        {% if private.name == service.testEngineer.name %}
+                            selected="selected"
+                        {% endif %}
+                        >{{ private.name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <select>
+                    {% for private in privates %}
+                        <option value="{{ private.name }}" 
+                        {% if private.name == service.productManager.name %}
+                            selected="selected"
+                        {% endif %}
+                        >{{ private.name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <select>
+                    {% for private in privates %}
+                        <option value="{{ private.name }}" 
+                        {% if private.name == service.operationEngineer.name %}
+                            selected="selected"
+                        {% endif %}
+                        >{{ private.name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <select>
+                    {% for serviceType in serviceTypes %}
+                        <option value="{{ serviceType.name }}" 
+                        {% if serviceType.name == service.serviceType.name %}
+                            selected="selected"
+                        {% endif %}
+                        >{{ serviceType.name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>{{ service.javaVersion }}</td>
+            <td>{{ service.codeSrc }}</td>
+            <td>{{ service.mavenCodePath }}</td>
+            <td>{{ service.targetFilePath }}</td>
+            <td>{{ service.mavenParameter }}</td>
+            <td>{{ service.ctime }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+ </body>
+<html>
