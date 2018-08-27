@@ -1,0 +1,18 @@
+1.下载代码
+git clone https://github.com/hongmalong/cmdb1.git
+
+2.
+cd cmdb1/cmdb1_demo1
+为了方便做实验，需要把数据库改成非上次实验的数据库。
+sed -i "s/'NAME': 'cmdb1_demo1',/'NAME': 'cmdb1_demo2',/g" cmdb1_demo1/setting.py
+
+3.导入数据
+mysql -u root -p -h 127.0.0.1 cmdb1_demo2 <cmdb1_demo1.sql
+
+4.启动
+cd ..
+python3 manage.py runserver 0.0.0.0:80
+
+5.测试发版
+http://cmdb.ggc.com/node
+
