@@ -1,18 +1,89 @@
 #coding:utf8
-from django.shortcuts import render,HttpResponseRedirect,render_to_response
+from django.shortcuts import render,HttpResponseRedirect,render_to_response,redirect
 from django.http import HttpResponse
 import time,os,sys,re,paramiko,git
 from operator import itemgetter, attrgetter
+from functools import wraps
     
 
 from .models import CompanyTable,HistoryTable,ProviderTable,ServerRoomTable,CabinetTable,EquipmentTypeTable,\
 EquipmentTable,OccupationTable,PrivateTable,ServiceTypeTable,ProjectTable,ServiceTable,NodeTable,\
-EnviromentTable,PortTable,LogPathTable,DeployLogTable,DeployHostTable
+EnviromentTable,PortTable,LogPathTable,DeployLogTable,DeployHostTable,User
 
 # Create your views here.
 def HelloWorld ( request ) :
     return HttpResponse ( 'hello world!' )
-    
+
+#################################################
+def Check_login(f):
+    @wraps(f)
+    def inner(request,*args,**kwargs):
+        if request.session.get('is_login')=='1':
+            return f(request,*args,**kwargs)
+        else:
+            return redirect('/login') 
+    return inner
+
+def Login(request):
+    if request.method=="POST":
+        username=request.POST.get('username')
+        password=request.POST.get('password')
+        user=User.objects.filter(username=username)
+        if len(user)==0:
+            return HttpResponse(username+' 不存在')
+        elif user[0].password!=password:
+            return HttpResponse('密码不正确')
+        else:
+            request.session['is_login']='1'  
+            request.session['user_id']=user[0].id
+            #return render(request,'index.html',{"user":user[0]})
+            return HttpResponse('/index')#返回一个url，带着request往回传，这个“它会带着request往浏览器传，我之前不知道。”
+            #？除了request，HttpRespose()还会往回传什么？我看网页上，HttpResponse()还有很多其他用法
+            #从这里开始页面有了cookie，原来的login页面是没有cookie的。也或者说是有了session
+            #只有当登陆了才能获得到session，没登陆是不能获得session的
+    return render(request,'login.html')
+
+@Check_login
+def Index(request):
+    user_id1=request.session.get('user_id')
+    userobj=User.objects.filter(id=user_id1)
+    if userobj:
+        return render(request,'index.html',{"user":userobj[0]})
+
+def Logout(request):
+    request.session['is_login']='0'  
+    return redirect('/login') 
+
+def Regist(request):
+    if request.method=='POST':
+        username=request.POST.get('username',None)
+        if username:
+            password=request.POST.get('password',None)
+            if password:
+                userObjects=User.objects.filter(username=username)
+                if userObjects:
+                    return HttpResponse('用户名已存在')
+                else:
+                    new=User()
+                    new.username=username
+                    new.password=password
+                    new.save()
+                    #自动登录
+                    request.session['is_login']='1'
+                    userObjects=User.objects.filter(username=username)
+                    request.session['user_id']=userObjects[0].id
+                    return HttpResponse('/index')
+                    #return render(request,'index.html',{"user":userObjects[0]})
+                    #return HttpResponse('Regist ok!')
+            else:
+                return HttpResponse('Password is not empty!')
+        else:
+            return HttpResponse('Username is not empty!')
+    elif request.method=='GET':
+        return render(request,'regist.html')
+        
+
+@Check_login    
 def Company ( request ) :
     companies= CompanyTable.objects.all()
     
@@ -857,7 +928,8 @@ def Ip ( request ) :
             new.save()
             return HttpResponse('ip '+ipIp+' update scusses!')
     return render_to_response ('ip.html',{'ips':ips,'companies':companies})
-"""   
+"""  
+@Check_login 
 def Node ( request ) :
     nodes= NodeTable.objects.all()
     enviroments = EnviromentTable.objects.all()
@@ -3801,15 +3873,7 @@ def GetGitList(request):
     #for p in branchsHead:
     #    print(p)   
     return HttpResponse(branchTagStr)
-
-
-
-
-
-
-
-
-
+##############################################################
 
 
 

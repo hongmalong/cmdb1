@@ -207,3 +207,7 @@ class DeployLogTable (models.Model ):
     node = models.ForeignKey(NodeTable,null=True, blank=True,on_delete=models.CASCADE)
     def __unicode__(self):
         return self.eventId
+        
+class User(models.Model):
+    username=models.CharField(max_length=16)
+    password=models.CharField(max_length=32)
