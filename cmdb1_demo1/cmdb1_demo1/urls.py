@@ -42,6 +42,11 @@ urlpatterns = [
     #path('upload',cmdb1_demo1_app1.views.Upload),
     re_path('viewDeployLog_nodeId_(?P<id>[\w]+)$',cmdb1_demo1_app1.views.ViewDeployLog_nodeId),
     re_path('viewDeployLog_eventId_(?P<id>[\w]+)$',cmdb1_demo1_app1.views.ViewDeployLog_eventId),
+    
+    path('login',cmdb1_demo1_app1.views.Login),
+    path('index',cmdb1_demo1_app1.views.Index),
+    path('logout',cmdb1_demo1_app1.views.Logout),
+    path('regist',cmdb1_demo1_app1.views.Regist),
 
 ]
  
