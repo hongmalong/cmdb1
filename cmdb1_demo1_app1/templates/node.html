@@ -363,7 +363,7 @@
         });
         $("#do").click(function(){
             $("input:checked").each(function(i){
-                var eventId=timeNow();
+                //var eventId=timeNow();
                 var Array=range(1,11);
                 //全局变量的声明如果重复会报错 Array.isArray is not a function
                 for (N in Array){
@@ -431,7 +431,7 @@
                     nodePortList:portList_value,
                     nodeLogPathList:logPathList_value,
                     nodeBranch:branch_value,
-                    eventId:eventId,
+                    //eventId:eventId,
                 },
                 success:function(response,status,xhr){
                     alert(response);

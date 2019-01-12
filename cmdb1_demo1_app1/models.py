@@ -198,16 +198,25 @@ class HistoryTable ( models.Model ) :
     def __unicode__(self):
         return self.id
 
+class EventTable(models.Model):
+    id = models.AutoField('ID',primary_key=True)
+    eventId = models.CharField(max_length=255,unique=True)
+    status = models.CharField(max_length=5000,null=True,default=None)
+    def __unicode__(self):
+        return self.eventId
+        
 class DeployLogTable (models.Model ):
     id = models.AutoField('ID',primary_key=True)
-    eventId = models.CharField(max_length=5000,null=True)
+    #eventId = models.CharField(max_length=5000,null=True)
+    event = models.ForeignKey(EventTable,null=True, blank=True,on_delete=models.CASCADE,to_field='eventId')
     log=models.CharField(max_length=6587,null=True)
     localtime = time.strftime( "%Y%m%d%H%M%S" , time.localtime() )
     ctime= models.CharField(max_length=49,null=True,default=localtime)
     node = models.ForeignKey(NodeTable,null=True, blank=True,on_delete=models.CASCADE)
     def __unicode__(self):
-        return self.eventId
+        return self.event.eventId
         
 class User(models.Model):
     username=models.CharField(max_length=16)
     password=models.CharField(max_length=32)
+    
