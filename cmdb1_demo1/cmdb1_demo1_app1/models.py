@@ -201,7 +201,8 @@ class HistoryTable ( models.Model ) :
 class EventTable(models.Model):
     id = models.AutoField('ID',primary_key=True)
     eventId = models.CharField(max_length=200,unique=True)
-    status = models.CharField(max_length=200,null=True,default=None)
+    status = models.CharField(max_length=200,null=True,default='going')
+    pid = models.CharField(max_length=20)
     def __unicode__(self):
         return self.eventId
 '''

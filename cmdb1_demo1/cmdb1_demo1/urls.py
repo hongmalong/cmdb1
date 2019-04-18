@@ -47,6 +47,8 @@ urlpatterns = [
     path('index',cmdb1_demo1_app1.views.Index),
     path('logout',cmdb1_demo1_app1.views.Logout),
     path('regist',cmdb1_demo1_app1.views.Regist),
+    path('stopProcess',cmdb1_demo1_app1.views.StopProcess)
+
 
 ]
  

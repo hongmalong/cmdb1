@@ -135,6 +135,36 @@
                 choiceRow.remove();
             });
         });
+        
+        $("#stop").click(function(){
+            $("input:checked").each(function(i){
+                choiceRow=$(this).parents('tr')
+                id_value=choiceRow.children().eq(2).text();
+                delSign=confirm('are you sure stop '+id_value+' ?');
+                nodeId=(window.location.pathname).replace('/viewDeployLog_nodeId_','');
+                
+                if (delSign == true){
+                    $.ajax({
+                        type:'POST',
+                        url:'/stopProcess',
+                        data:{
+                            eventId:id_value,
+                            delSign:delSign,
+                            nodeId:nodeId,
+                        },
+                        success:function(response,status,xhr){
+                        alert(response);
+                        }
+                    });}
+                else{
+                    return
+                }
+                
+                //choiceRow.remove();
+            });
+        });
+        
+
         $("td.a").click(function(){
             eventId=this.innerHTML;
             lastestLog='';
@@ -159,7 +189,7 @@
                                 lastestLog=responseArray[i-1];
                             } 
                         }
-                        if (lastestLog.indexOf('done')>0||lastestLog.indexOf('false')>0){
+                        if (lastestLog.indexOf('done')>=0||lastestLog.indexOf('false')>=0){
                                 window.clearInterval(int);
                             }
                     },
@@ -404,14 +434,17 @@
     <button id="addbtn" >表格加一行</button>
     <button id="delbtn" >表格减一行</button>
     <button id="upload" >提交</button>
+    <button id="stop" >stop</button>
     <div style="float:left;">
     <table border=1 cellspacing="0" id="companyTable">
         <tr>
+            <th>stop</th>
             <th>count</th>
             <th>eventId</th>
         </tr>
         {% for eventId in eventIds %}
         <tr>
+            <td><input type="checkbox"></td>
             <td>{{ forloop.revcounter }}</td>
             <td class='a'>{{ eventId }}</td>
         </tr>

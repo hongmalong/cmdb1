@@ -1,7 +1,7 @@
 #coding:utf8
 from django.shortcuts import render,HttpResponseRedirect,render_to_response,redirect
 from django.http import HttpResponse
-import time,os,sys,re,paramiko,git
+import time,os,sys,re,paramiko,git,subprocess
 from operator import itemgetter, attrgetter
 from functools import wraps
     
@@ -14,6 +14,33 @@ EnviromentTable,PortTable,LogPathTable,DeployHostTable,User,DeployLogTable,Event
 def HelloWorld ( request ) :
     return HttpResponse ( 'hello world!' )
 
+Debug=True #是否开启debug模式
+    
+def debug(func):
+    def wrapper(*args,**kwargs):#指定宇宙无敌参数
+        if Debug:
+            print("[DEBUG]: enter {}()".format(func.__name__))
+        #print("prepare and say ...")
+        return func(*args,**kwargs)
+    return wrapper
+
+
+def CheckEventStatus(func):
+    @wraps(func)
+    def inner(*args,**kwargs):
+        for i in args:
+            try:
+                i.status
+                event=i
+            except BaseException:
+                pass
+        if event.status=='cancel':
+            print('###############')
+            return event.status
+        else:
+            return func(*args,**kwargs)
+    return inner  
+    
 #################################################
 def Check_login(f):
     @wraps(f)
@@ -1234,6 +1261,23 @@ def Port ( request ) :
 def LogPath ( request ) :
     return HttpResponse ( 'hello world!' )
 
+def sshAuth(host,port,userName):
+    result={'transport':'a','status':'true'}
+    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
+    transport = paramiko.Transport((host, port))
+    #paramiko.ssh_exception.AuthenticationException 这是认证失败的报错类型。应该在这里有个try动作。如果认证失败，应该返回页面'认证失败'。
+    try:
+        transport.connect(username=userName, pkey=private_key)
+    except paramiko.ssh_exception.AuthenticationException:
+        # result['transport']=transport
+        result['status']='false'
+        return result
+    else:
+        result['transport']=transport
+        #result['status']='false'
+        return result
+        
+    
 def Unzip(srcPath,targetPath,targetChildPath,host,sshPort,sshName,event,node):
     CheckPathAndAdd(host,sshPort,sshName,targetPath,event,node)
     #outLogFile=targetPath+'/nohup.out'
@@ -1245,7 +1289,7 @@ def Unzip(srcPath,targetPath,targetChildPath,host,sshPort,sshName,event,node):
 
     temporaryPath=targetPath+targetChildPath
     #time.sleep(3)
-    exist=RemoteFileExist(host,sshPort,sshName,temporaryPath)
+    exist=RemoteFileExist(host,sshPort,sshName,temporaryPath,event)
     if exist == 'exist':
         log=host+" : "+'成功:解压缩'+srcPath+' to '+temporaryPath
         DeployLog(log,event,node)
@@ -1260,7 +1304,7 @@ def Unzip(srcPath,targetPath,targetChildPath,host,sshPort,sshName,event,node):
 def Mv(srcPath,targetPath,host,sshPort,sshName,event,node):
     command=('mv -f '+srcPath+' '+targetPath)
     RemoteControl(host,sshPort,sshName,command,event,node)
-    exist=RemoteFileExist(host,sshPort,sshName,targetPath)
+    exist=RemoteFileExist(host,sshPort,sshName,targetPath,event)
     if exist == 'exist':
         log=host+" : "+(' 成功:mv '+srcPath+' to '+targetPath)
         DeployLog(log,event,node)
@@ -1271,6 +1315,8 @@ def Mv(srcPath,targetPath,host,sshPort,sshName,event,node):
         DeployLog(log,event,node)
         return log
         
+
+#@CheckEventStatus
 def Sed(src,target,filePath,host,sshPort,sshName,event,node):
     command=("grep -n '"+src+"' "+filePath)
     result=RemoteControl(host,sshPort,sshName,command,event,node)
@@ -1290,12 +1336,19 @@ def Sed(src,target,filePath,host,sshPort,sshName,event,node):
             DeployLog(log,event,node)
             return log
             
+##@debug
+@CheckEventStatus
 def RemoteControl(host,port,userName,command,event,node):
-    import paramiko,time,sys
-    private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
-    transport = paramiko.Transport((host, port))
-    print(host)
-    transport.connect(username=userName, pkey=private_key)
+    #print(host,port,userName)
+    result=sshAuth(host,port,userName)
+    if 'false' in result['status']:
+        #print('认证失败;进行到了1313行了，接下来把认证判断铺开')
+        log="认证失败,请检测：ssh -p %d %s@%s" %(port,userName,host)
+        print(log)
+        DeployLog(log,event,node)
+        return 'false'
+    else:
+        transport=result['transport']
     ssh = paramiko.SSHClient()
     ssh._transport = transport
     log=host+' : '+command
@@ -1524,6 +1577,7 @@ def RemoterControlInvoke4ok(host,port,userName,commands,event,node):
     a.close()
     transport.close()
 
+@CheckEventStatus
 def RemoterControlInvoke4ok13(host,port,userName,commands,event,node):
     #这个方法tar 和maven，非交互式的都可以了。现在复制它，开发需要交互式的过程
     #yum交互过程开发完了。期待，日后有其他的交互行为使用这个方法处理过程。
@@ -1553,6 +1607,8 @@ def RemoterControlInvoke4ok13(host,port,userName,commands,event,node):
 
     #commands='cd /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/git_clone/d.mypharma.com\n;mvn  -s  /rgec/var/autodeploy/dev_gm_mph_www/20180613174607597/settings.xml  clean package -P dev_wh  -Dmaven.test.skip=true\n;/bin/ls -l\n;\n'
     commands=commands+';\n;\n'
+    #commands=commands+'\n;\n;\n'
+    #如果想不在命令后面加\n，就用第二条commands定义
     #print(commands)
     #commands='cd /tmp \n;pwd\n'
     commandList=commands.split(';')
@@ -1594,8 +1650,13 @@ def RemoterControlInvoke4ok13(host,port,userName,commands,event,node):
     z31=str.encode('[A')
     z32=str.encode('[C')
     z33=str.encode('[Km')
+    z34=str.encode('(yes/no)? \x1b[0m') 
+    z35=str.encode('[32m')
+    z36=str.encode('[[0m')
+    z37=str.encode('[0m')
+    z38=str.encode('[34m')
     
-    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1,z13,z23,z24,z25,z26,z27,z30,z31,z32,z33]
+    needReplaceList=[p,s,t,v,w,x,z,z1,z2,z6,z11,z18,y1,z13,z23,z24,z25,z26,z27,z30,z31,z32,z33,z35,z36,z37,z38]
     doingList=[z22,z15,z29]
     m=1
     b=a.recv(10240)
@@ -1645,7 +1706,7 @@ def RemoterControlInvoke4ok13(host,port,userName,commands,event,node):
                 #print('b是否以[y/N]: 结尾，如果是，就发送y,然后在获取结果。如果不是，那就继续获取b')
                 if b.endswith(z17):
                     a.send('y\n')
-                if b.endswith(z28):
+                if b.endswith(z28) or b.endswith(z34):
                     a.send('yes\n')
                 z16=a.recv(10240)
                 #print('z16的值是')
@@ -1694,8 +1755,9 @@ def RemoterControlInvoke4ok13(host,port,userName,commands,event,node):
     a.close()
     transport.close()   
     return result
-   
-def RemoteFileExist(host,port,userName,path):
+
+@CheckEventStatus   
+def RemoteFileExist(host,port,userName,path,event):
     import paramiko,time,sys
     private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
     try:
@@ -1743,20 +1805,30 @@ def addRemoteGroup(groupName,host,sshPort,sshName,event,node):
             log=host+" : "+'false'
             DeployLog(log,event,node)
             return log
-     
+    
+#@debug
+#@CheckEventStatus
 def Upload(host,sshPort,sshName,oldFileName,newFileName,event,node):
-    exist=RemoteFileExist(host,sshPort,sshName,newFileName)
+    exist=RemoteFileExist(host,sshPort,sshName,newFileName,event)
     if exist !='exist':
         log=host+" : "+'不存在路径：'+newFileName+',开始上传'
         DeployLog(log,event,node)
-        import paramiko,time,sys
-        private_key = paramiko.RSAKey.from_private_key_file('/root/.ssh/id_rsa')
-        transport = paramiko.Transport((host,sshPort))
-        transport.connect(username=sshName, pkey=private_key)
+        
+        result=sshAuth(host,sshPort,sshName)
+        if 'false' in result['status']:
+            #print('认证失败;进行到了1313行了，接下来把认证判断铺开')
+            log="认证失败,请检测：ssh -p %d %s@%s" %(sshPort,sshName,host)
+            print(log)
+            DeployLog(log,event,node)
+            return 'false'
+        else:
+            transport=result['transport']
+        
         sftp = paramiko.SFTPClient.from_transport(transport)
+        ##print(oldFileName,newFileName)
         sftp.put(oldFileName,newFileName)
         transport.close()
-        exist=RemoteFileExist(host,sshPort,sshName,newFileName)
+        exist=RemoteFileExist(host,sshPort,sshName,newFileName,event)
         if exist =='exist':
             log=host+" : "+('成功：上传完成 ,路径：'+newFileName)
             DeployLog(log,event,node)
@@ -1775,7 +1847,7 @@ def Rm(host,sshPort,sshName,path,event,node):
     DeployLog(log,event,node)
     command='rm -rf '+path
     RemoteControl(host,sshPort,sshName,command,event,node)
-    exist=RemoteFileExist(host,sshPort,sshName,path)
+    exist=RemoteFileExist(host,sshPort,sshName,path,event)
     if exist =='exist':
         log=host+" : "+('失败：删除,路径：'+path)
         DeployLog(log,event,node)
@@ -1788,7 +1860,7 @@ def Rm(host,sshPort,sshName,path,event,node):
      
 '''
 def CheckUploadAndContinu(host,sshPort,sshName,path,event,node):
-    exist=RemoteFileExist(host,sshPort,sshName,path)
+    exist=RemoteFileExist(host,sshPort,sshName,path,event)
     if exist =='exist':
         log=host+" : "+('成功上传 ,路径：'+path)
         DeployLog(log,event,node)
@@ -1821,7 +1893,7 @@ def StartApp(appName,appPort,host,sshPort,sshName,event,node,company):
         return log
 
 def CheckPathAndAdd(host,sshPort,sshName,path,event,node):
-    exist=RemoteFileExist(host,sshPort,sshName,path)
+    exist=RemoteFileExist(host,sshPort,sshName,path,event)
     if exist == 'exist': 
         log=host+" : "+path+' 存在'
         DeployLog(log,event,node)
@@ -1829,7 +1901,7 @@ def CheckPathAndAdd(host,sshPort,sshName,path,event,node):
         log=host+" : "+path+' 不存在，执行创建作业'
         DeployLog(log,event,node)
         RemoteControl(host,sshPort,sshName,'mkdir -pv '+path,event,node)
-        exist=RemoteFileExist(host,sshPort,sshName,path)
+        exist=RemoteFileExist(host,sshPort,sshName,path,event)
         if exist == 'exist': 
             log=host+" : "+'成功创建:'+path
             DeployLog(log,event,node)
@@ -1839,11 +1911,12 @@ def CheckPathAndAdd(host,sshPort,sshName,path,event,node):
             log=host+" : "+'false'
             DeployLog(log,event,node)
             return log
- 
-def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,event,node,tomcatVersion,company,javaVersion,appName):
+
+@CheckEventStatus
+def InstallTomcat(event,host,sshName,sshPort,tomcatPortList,appPath,node,tomcatVersion,company,javaVersion,appName):
     softSrcPath='/'+company+'/src'
     tomcatSrcPath=softSrcPath+'/apache-tomcat-'+tomcatVersion+'.tar.gz'
-    exist=RemoteFileExist(host,sshPort,sshName,tomcatSrcPath)
+    exist=RemoteFileExist(host,sshPort,sshName,tomcatSrcPath,event)#检测tomcat 包是否已经传上去了。
     if exist != 'exist':
         log=host+" : "+(tomcatSrcPath+'不存在，需要上传')
         DeployLog(log,event,node)
@@ -1921,7 +1994,7 @@ def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,event,node,tomcatV
         command="chown -R "+company+"."+company+" "+i
         result=RemoteControl(host,sshPort,sshName,command,event,node)
     #检测java是否存在
-    exist=RemoteFileExist(host,sshPort,sshName,javaHome)
+    exist=RemoteFileExist(host,sshPort,sshName,javaHome,event)
     if exist == 'exist':
         log=host+" : "+javaHome+'存在'
         DeployLog(log,event,node)
@@ -1935,14 +2008,18 @@ def InstallTomcat(host,sshName,sshPort,tomcatPortList,appPath,event,node,tomcatV
     StartApp(appName,tomcatHttpPort,host,sshPort,sshName,event,node,company)
     #sftp.get('/filedir/oldtext.txt', r'C:\Users\duany_000\Desktop\oldtext.txt')
 
+
 def DeployLog(log,event,node):
     new=DeployLogTable()
     new.log=log
     new.event=event
     new.node=node
-    #print(len(log))
+    #print(log)
     new.save()
     
+    
+#@debug
+#@CheckEventStatus
 def GetSshPort(host,company):
     companyObject=CompanyTable.objects.get(name=company)
     serverRooms=ServerRoomTable.objects.filter(company=companyObject)
@@ -1963,7 +2040,9 @@ def GetSshPort(host,company):
     sshPort=int(hostObject.controlPort)
     return sshPort
     
-def PullGit(deployHost,company,gitPath,branch,event,appName,node,mavenCodePath,gitCloneDir):
+#@debug
+@CheckEventStatus
+def PullGit(event,deployHost,company,gitPath,branch,appName,node,mavenCodePath,gitCloneDir):
     #gitCloneDir='/'+company+'/var/autodeploy/'+appName+'/'+event.eventId+'/git_clone/'
     log=deployHost+" : 创建目录,git克隆目录: "+gitCloneDir
     DeployLog(log,event,node)
@@ -1981,9 +2060,11 @@ def PullGit(deployHost,company,gitPath,branch,event,appName,node,mavenCodePath,g
             return log
     return result
 
+#@debug
+@CheckEventStatus
 def CheckCommonTools(host,sshPort,sshName,fullPath,oldFileName,newFileName,targetPath,targetChildPath,event,node):
     #检查远程文件名是否存在，没有就上传，解压缩。
-    result=RemoteFileExist(host,sshPort,sshName,fullPath)
+    result=RemoteFileExist(host,sshPort,sshName,fullPath,event)
     if 'not' in result:
         log=host+" : "+fullPath+'不存在，需要上传'
         DeployLog(log,event,node)
@@ -2009,6 +2090,8 @@ def CheckCommonTools(host,sshPort,sshName,fullPath,oldFileName,newFileName,targe
                     result='done'
     return result
         
+#@debug
+@CheckEventStatus
 def PackageMaven(event,appName,company,host,node,mavenCodePath,packagePro,gitCloneDir):
     
     #1.生成maven临时本地仓库
@@ -2034,7 +2117,7 @@ def PackageMaven(event,appName,company,host,node,mavenCodePath,packagePro,gitClo
     #packagePro=' clean package -P dev_wh'
     mavenPackageLog=rootDIR+'mavenPackage.log'
     commands='cd '+gitCloneDir+mavenCodePath+'\n;mvn -s '+settingFilePath+packagePro+'\n;/bin/ls -l\n'
-    print(commands)
+    #print(commands)
     #用交互式方式开始打包，先好检测是否有maven软件，检测上传部署maven的过程应该是个函数
     #mvn -s /rgec/var/autodeploy/dev-wh-mph-gppayservice/20180607_471718/maven_setting/settings.xml clean deploy -P dev_wh -Dmaven.test.skip=true
     #打包前，判断打包服务器是否有maven，如果没有就自动部署
@@ -2060,7 +2143,8 @@ def PackageMaven(event,appName,company,host,node,mavenCodePath,packagePro,gitClo
         DeployLog(log,event,node)
         return log
     #print('llllllllllll')
-
+    
+@CheckEventStatus
 def DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,appTargetPackagePath,appUnzipPackageDir,appServicePath,event,node):
     #把软件包传上去
     #停止服务
@@ -2074,7 +2158,9 @@ def DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,app
     #如果有检测端口是否存在
     #如果有检测心跳页面是否存在
     #完
+    
     deployHostSshPort=GetSshPort(deployHost,company)
+    
     serviceSshPort=GetSshPort(serviceHost,company)
     appDataPath='/'+company+'/data/autodeploy/tomcat-webapps/'+appName
     #print(appDataPath)
@@ -2093,7 +2179,7 @@ def DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,app
     project=node.project.name
     service=node.service.name
     ipPort=serviceIP+':'+servicePort
-    result=RemoteFileExist(nginxIp,int(nginxSshPort),'root',nginxVhostConfig)
+    result=RemoteFileExist(nginxIp,int(nginxSshPort),'root',nginxVhostConfig,event)
     #第二次发布，先下线nginxNode
     if result=='exist' :
         #1.知道nginx配置文件
@@ -2166,7 +2252,8 @@ def DeployForTomcat(deployHost,serviceHost,company,appName,appSrcPackagePath,app
     commands='/etc/init.d/nginx reload\n'
     result=RemoterControlInvoke4ok13(serviceHost,serviceSshPort,'root',commands,event,node)
     
-def DeployForSpringBoot(serviceHost,event,node,deployHost,company):
+@CheckEventStatus
+def DeployForSpringBoot(event,serviceHost,node,deployHost,company):
     #def DeployForSpringBoot(serviceHost,event,node,deployHost,company):
     #1.上传
     #2.停止原服务
@@ -2217,7 +2304,8 @@ def DeployForSpringBoot(serviceHost,event,node,deployHost,company):
     servicePort=((node.portList).split(','))[0]
     StartApp(serviceName,servicePort,serviceHost,serviceSshPort,'root',event,node,company)
     
-def DeployForDubbo(serviceHost,event,node,deployHost,company):
+@CheckEventStatus
+def DeployForDubbo(event,serviceHost,node,deployHost,company):
     #1.上传
     #2.停止原服务
     #3.删除原包
@@ -2285,26 +2373,40 @@ def DeployForDubbo(serviceHost,event,node,deployHost,company):
     servicePort=((node.portList).split(','))[0]
     StartApp(serviceName,servicePort,serviceHost,serviceSshPort,'root',event,node,company)
     
+def getEventObject(pid):
+    eventId=time.strftime("%Y%m%d%H%M%S")+"%03d"%((time.time()-int(time.time()))*1000)
+    event=EventTable()
+    event.eventId=eventId
+    event.pid=pid
+    event.save()
+    return event
+    
+##@debug
 def Do(request):
+    pid=os.getpid()#如果我要杀进程，那么就是从do这里杀死，所以，获取的也应该是do的pid。
+    print(str(pid)+'#到这里了，杀死进程.先存储进程号，到event对象，然后杀死就调用它')
     companyName='rgec'
     #这里以后会采集用户信息，来判断他的公司名称。目前就先写死。
     result=''
     if request.method == 'POST':
-        #eventId=request.POST.get('eventId',None)
-        #event=EventTable.objects.get(eventId=eventId)
+        """
+        eventId=request.POST.get('eventId',None)
+        event=EventTable.objects.get(eventId=eventId)
         
-        #eventId=request.POST.get('eventId',None)
-        #a=time.strftime("%Y%m%d%H%M%S")
-        #b=time.time()
-        #c=(b-int(b))*1000
-        #d="%03d"%(c)
-        #e=str(a)+str(d)
+        eventId=request.POST.get('eventId',None)
+        a=time.strftime("%Y%m%d%H%M%S")
+        b=time.time()
+        c=(b-int(b))*1000
+        d="%03d"%(c)
+        e=str(a)+str(d)
         eventId=time.strftime("%Y%m%d%H%M%S")+"%03d"%((time.time()-int(time.time()))*1000)
         event=EventTable()
         event.eventId=eventId
-        event.save()
-        print(event.eventId)
-        nodeId = request.POST.get('nodeId',None)
+        event.save()#这串可以单独存在，拿出去吧。
+        """
+        event=getEventObject(pid)
+        #print(event.eventId) #如是：20190113094123150 定义事件id
+        nodeId = request.POST.get('nodeId',None) #每个node都有个id
         nodeBranch = request.POST.get('nodeBranch',None)
         if nodeId != '':
             nodeObject=NodeTable.objects.get(id=nodeId)
@@ -2319,51 +2421,68 @@ def Do(request):
             appName=enviroment+'-'+serverRoom+'-'+project+'-'+service
             company=nodeObject.project.company.name
             appPath=''
-            if serviceType=='tomcat':
+            
+            if serviceType=='tomcat' :#检测是否存在tomcat，如果存在就拉包，不存在就建立。
                 tomcatVersion=nodeObject.service.serviceType.version 
                 javaVersion=nodeObject.service.javaVersion
                 appPath='/'+companyName+'/app/autodepoly/'+serviceType+'/'+appName+'-tomcat-'+tomcatVersion
-                exist=RemoteFileExist(host,int(controlPort),'root',appPath)
+                
+                exist=RemoteFileExist(host,int(controlPort),'root',appPath,event)
+                
                 if 'Unable to connect ' in exist:
+                    event.status='false'
+                    event.save()
                     return HttpResponse(exist)
-                elif exist != 'exist':
+                elif exist != 'exist' :
                     log=host+" : "+(appPath+'目录不存在，需要安装tomcat')
                     DeployLog(log,event,nodeObject)
-                    result=InstallTomcat(host,'root',int(controlPort),portList,appPath,event,nodeObject,tomcatVersion,company,javaVersion,appName)
+                    result=InstallTomcat(event,host,'root',int(controlPort),portList,appPath,nodeObject,tomcatVersion,company,javaVersion,appName)
+                    #print(result)
                     if result == 'false':
+                        event.status='false'
+                        event.save()
                         return HttpResponse('搭建tomcat失败')
+            
             log=appPath+'目录已存在，此时，该开始拉代码了'
             DeployLog(log,event,nodeObject)
-            serverRoomObject=nodeObject.serverRoom
+            serverRoomObject=nodeObject.serverRoom #是否应该把变量放在开头，这样，看起来好看点。
             deployHost=(DeployHostTable.objects.get(serverRoom=serverRoomObject)).host.ipAddress
             projectObject=ProjectTable.objects.get(name=project)
             serviceObject=ServiceTable.objects.get(name=service,project=projectObject)
             gitPath=serviceObject.codeSrc
             
-            mavenCodePath=serviceObject.mavenCodePath
-            packagePro=serviceObject.mavenParameter
+            mavenCodePath=serviceObject.mavenCodePath #如果语言是nodejs，就不用maven了。所以这里应该判断他的语言类型。
+            #packagePro=serviceObject.mavenParameter 
             #print(serviceObject.id)
             #print(packagePro)
             #mavenParameter=enviroment+'_'+serverRoom
-            packagePro='   '+serviceObject.mavenParameter+' '+enviroment+'_'+serverRoom
+            packagePro='   '+serviceObject.mavenParameter+' '+enviroment+'_'+serverRoom #打包参数
+            #print('sign')
             gitCloneDir='/'+company+'/var/autodeploy/'+appName+'/'+event.eventId+'/git-clone/'
-            result=PullGit(deployHost,company,gitPath,nodeBranch,event,appName,nodeObject,mavenCodePath,gitCloneDir)
+            result=PullGit(event,deployHost,company,gitPath,nodeBranch,appName,nodeObject,mavenCodePath,gitCloneDir)
             if 'false' in result:
-                return HttpResponse(result)
+                event.status='false'
+                event.save()
+                return HttpResponse(result) #这个返回有点low，不知道这里改了会不会影响后续。不会影响后续，只是没必要改它。
+                
             log='拉完代码了，开始打包'
             DeployLog(log,event,nodeObject)
             javaVersion=nodeObject.service.javaVersion
-            if javaVersion != None:
+            if javaVersion != None : #在这里打包，应该在这里kill进程试试。杀，就报错了。可是如果报错，就说明杀成功了                
                 result=PackageMaven(event,appName,company,deployHost,nodeObject,mavenCodePath,packagePro,gitCloneDir)
                 if result == 'false':
+                    event.status='false'
+                    event.save()
                     return HttpResponse(result)
+                    
+            time.sleep(1000)
             serviceHost=host
             #服务部署的服务器地址:192.168.20.99
             appSrcPackagePath=gitCloneDir+nodeObject.service.targetFilePath
             #服务打完包的路径:/rgec/var/autodeploy/dev-gm-mph-www/20180702082446848/git-clone/d.mypharma.com/target/ROOT.war
             mavenTargetFile=((nodeObject.service.targetFilePath).split('/'))[-1]
             #服务打包后的文件名:ROOT.war
-            if serviceType=='tomcat':
+            if serviceType=='tomcat':#打包方式不同，部署方式不同
                 appTargetPackagePath='/'+company+'/data/autodeploy/tomcat-webapps/'+appName+'/'+mavenTargetFile
                 #print(appTargetPackagePath)
                 #上传后的服务文件名:/rgec/data/autodeploy/tomcat-webapps/dev-gm-mph-www/ROOT.war
@@ -2382,10 +2501,13 @@ def Do(request):
                 #appServicePath:/rgec/app/autodepoly/tomcat/dev-gm-mph-www-tomcat-7.0.59
                 '''
             if serviceType=='sprintBoot':
-                DeployForSpringBoot(serviceHost,event,nodeObject,deployHost,company)
-            if serviceType=='dubbo':
-                DeployForDubbo(serviceHost,event,nodeObject,deployHost,company)
+                DeployForSpringBoot(event,serviceHost,nodeObject,deployHost,company)
                 
+            if serviceType=='dubbo':
+                DeployForDubbo(event,serviceHost,nodeObject,deployHost,company)
+            
+            event.status='done'
+            event.save()
             log='ok done'
             DeployLog(log,event,nodeObject)
             return HttpResponse('done')
@@ -2410,7 +2532,7 @@ def ViewDeployLog_nodeId(request,id):
             
         eventIds=list(set(eventIds))
         eventIds=sorted(eventIds,reverse=True)
-        print(eventIds)
+        #print(eventIds)
     return render_to_response('viewDeployLog.html',{'eventIds':eventIds})
 
 def ViewDeployLog_event(request,id):
@@ -2517,10 +2639,50 @@ def GetGitList(request):
     #    print(p)   
     return HttpResponse(branchTagStr)
 ##############################################################
+#@debug
+def StopProcess(request):
+    #结束对象的方法就这样了。不在探索，足足耽误了一年了。
+    if request.method=='POST':
+        eventId=request.POST.get('eventId',None)
+        #print(eventId)
+        event=EventTable.objects.get(eventId=eventId)
+        event.status='cancel'#通过这种方式结束对象，这叫共享变量的方式。
+        event.save()
+        
+        nodeId=request.POST.get('nodeId',None)
+        node=NodeTable.objects.get(id=nodeId)
+        log='false'
+        DeployLog(log,event,node)
+        #serverRoom=node.serverRoom
+        #deployHost=DeployHostTable.objects.get(serverRoom=serverRoom).host
+        #host=deployHost.ipAddress
+        #port=deployHost.controlPort
+        #userName='root'
+        #pid=event.pid
+        #command='kill -9 '+str(pid)#这样不行，结束掉某个中间进程，整体进程不受控制（interupt方法，结束阻塞的方法在python中不存在，所以只能设置超时，让其自动死亡）。#杀死的是主进程，同时运行的其他线程也会受到影响。所以不能这样做。
+        #RemoteControl(host,port,userName,command,event,node)
+        
+        return HttpResponse('done')
 
-
-
-
+def checkEventStatus(request):
+    print('到这里了，执行动作前，要先检查事件是否已经被中止，关键是这个修饰器该怎么写')
+    if request.method=="POST":
+        username=request.POST.get('username')
+        password=request.POST.get('password')
+        user=User.objects.filter(username=username)
+        if len(user)==0:
+            return HttpResponse(username+' 不存在')
+        elif user[0].password!=password:
+            return HttpResponse('密码不正确')
+        else:
+            request.session['is_login']='1'  
+            request.session['user_id']=user[0].id
+            #return render(request,'index.html',{"user":user[0]})
+            return HttpResponse('/index')#返回一个url，带着request往回传，这个“它会带着request往浏览器传，我之前不知道。”
+            #？除了request，HttpRespose()还会往回传什么？我看网页上，HttpResponse()还有很多其他用法
+            #从这里开始页面有了cookie，原来的login页面是没有cookie的。也或者说是有了session
+            #只有当登陆了才能获得到session，没登陆是不能获得session的
+    return render(request,'login.html')
 
 
 
